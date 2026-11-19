@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>추천 규칙 검사</title>
+  <link rel="stylesheet" href="css/design.css">
+  <style>
+    table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+    th, td { border-bottom: 1px solid var(--line); padding: var(--sp-2); text-align: left; vertical-align: top; }
+    th { color: var(--text-muted); font-weight: 600; }
+    .pass { color: var(--success); font-weight: 700; }
+    .fail { color: var(--danger); font-weight: 700; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: var(--sp-4); overflow-x: auto; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>추천 규칙 검사</h1>
+  <p class="muted">앱의 실제 계산 코드(js/logic.js)에 예시를 넣어 설계서 표와 같은 답이 나오는지 확인합니다.</p>
+  <div id="summary"></div>
+  <h2>1. 난이도 평가 → 다음 추천 (설계서 4-6)</h2>
+  <div class="card"><table id="t-rec"></table></div>
+  <h2>2. 주간 루틴 분할 (설계서 4-2)</h2>
+  <div class="card"><table id="t-split"></table></div>
+  <h2>3. 목표 점검 (설계서 4-1)</h2>
+  <div class="card"><table id="t-goal"></table></div>
+  <h2>4. MET·칼로리 배분</h2>
+  <div class="card"><table id="t-kcal"></table></div>
+</div>
+<script src="js/exercises.js"></script>
+<script src="js/logic.js"></script>
+<script>
+  const R = Logic.rules({});
+  let pass = 0, total = 0;
+  const mark = ok => { total++; if (ok) pass++; return ok ? '<span class="pass">통과</span>' : '<span class="fail">틀림</span>'; };
+  const sets = (w, reps) => reps.map(r => ({ w, r, done: true }));
+  const show = (ex, x) => Logic.isWeighted(ex) ? `${x.weight}kg × ${x.reps}회` : `${x.reps}회`;
+
+  // ---- 1. 다음 추천 ----
+  const cases = [
+    { title: '여유(RPE 6 이하) + 모든 세트 상한 달성', ex: 'bench', level: 'intermediate', rec: { weight: 60, reps: 12 }, reps: [12, 12, 12, 12], rating: 'easy',
+      rule: '상한(12회) 모두 채움 → 중량 증가(상체 +2.5kg), 횟수는 하한(8회)으로', expect: { weight: 62.5, reps: 8 } },
+    { title: '여유 + 상한 못 채움', ex: 'bench', level: 'intermediate', rec: { weight: 60, reps: 10 }, reps: [12, 11, 10, 10], rating: 'easy',
+      rule: '횟수 +2 (상한 12회를 넘지 않음)', expect: { weight: 60, reps: 12 } },
+    { title: '적정(RPE 7~8) + 상한 도달 (하체 바벨)', ex: 'squat', level: 'beginner', rec: { weight: 40, reps: 15 }, reps: [15, 15, 15], rating: 'ok',
+      rule: '상한(15회) 도달 → 중량 증가(하체 +5kg), 횟수 하한(10회)', expect: { weight: 45, reps: 10 } },
+    { title: '적정 + 상한 전', ex: 'chest_press', level: 'intermediate', rec: { weight: 30, reps: 11 }, reps: [11, 11, 11, 11], rating: 'ok',
+      rule: '횟수 +1', expect: { weight: 30, reps: 12 } },
+    { title: '한계 근접(RPE 9~10) 3회 연속 (머신)', ex: 'lat_pulldown', level: 'intermediate', rec: { weight: 40, reps: 10, hardStreak: 2 }, reps: [10, 10, 9], rating: 'hard',
+      rule: '같은 중량·횟수 유지, 3회 연속이면 10% 감소 제안 (40 × 0.9 = 36kg)', expect: { weight: 40, reps: 10, suggestDrop: true, dropTo: 36 } },
+    { title: '목표 미달 (덤벨)', ex: 'db_shoulder', level: 'intermediate', rec: { weight: 14, reps: 9 }, reps: [9, 7, 6], rating: 'fail',
+      rule: '중량 10% 감소 (14 × 0.9 = 12.6 → 1kg 단위로 내림 = 12kg)', expect: { weight: 12, reps: 9 } },
+    { title: '맨손 운동 여유', ex: 'pushup', level: 'beginner', rec: { weight: 0, reps: 15 }, reps: [15, 15, 15], rating: 'easy',
+      rule: '맨손 운동은 횟수만 올림 (+2)', expect: { weight: 0, reps: 17 } },
+    { title: '목표 미달 (머신 15kg)', ex: 'chest_press', level: 'intermediate', rec: { weight: 15, reps: 10 }, reps: [10, 8, 6], rating: 'fail',
+      rule: '10% 감소: 15 × 0.9 = 13.5 → 1kg 단위로 내림 = 13kg (5kg 칸으로 내려 10kg가 되면 안 됨)', expect: { weight: 13, reps: 10 } },
+    { title: '목표 미달 (바벨 60kg)', ex: 'bench', level: 'intermediate', rec: { weight: 60, reps: 8 }, reps: [8, 6, 5], rating: 'fail',
+      rule: '10% 감소: 60 × 0.9 = 54 → 바벨 2.5kg 단위로 내림 = 52.5kg', expect: { weight: 52.5, reps: 8 } },
+  ];
+  let h = '<tr><th>#</th><th>예시</th><th>이번 추천 / 실제 기록</th><th>평가</th><th>설계서 규칙</th><th>기대 결과</th><th>계산 결과</th><th>결과</th></tr>';
+  cases.forEach((c, i) => {
+    const ex = EX[c.ex];
+    const presc = Logic.prescription(ex, c.level, R);
+    const out = Logic.nextRec(ex, Object.assign({ hardStreak: 0 }, c.rec), sets(c.rec.weight, c.reps), c.rating, presc, R);
+    let ok = out.weight === c.expect.weight && out.reps === c.expect.reps;
+    if (c.expect.suggestDrop) ok = ok && out.suggestDrop && out.dropTo === c.expect.dropTo;
+    h += `<tr><td>${i + 1}</td><td><b>${c.title}</b><br><span class="muted">${ex.name} · ${LEVELS[c.level]} (${presc.lo}~${presc.hi}회)</span></td>
+      <td>${show(ex, c.rec)}<br><span class="muted">${c.reps.join(', ')}회</span></td><td>${RATINGS[c.rating]}</td><td>${c.rule}</td>
+      <td>${show(ex, c.expect)}${c.expect.suggestDrop ? `<br>감소 제안 ${c.expect.dropTo}kg` : ''}</td>
+      <td>${show(ex, out)}${out.suggestDrop ? `<br>감소 제안 ${out.dropTo}kg` : ''}<br><span class="muted">${out.note}</span></td><td>${mark(ok)}</td></tr>`;
+  });
+  document.getElementById('t-rec').innerHTML = h;
+
+  // ---- 2. 분할 ----
+  const name = k => Logic.DAYS[k].name;
+  const splits = [
+    [2, 'beginner', '전신A → 전신B'],
+    [3, 'beginner', '전신A → 전신B → 전신A'],
+    [3, 'intermediate', '상체 → 하체 → 전신'],
+    [4, 'intermediate', '상체A (어깨·등) → 하체A (앞쪽) → 상체B (가슴·팔) → 하체B (뒤쪽)'],
+    [5, 'intermediate', '상체1 (어깨·등) → 하체1 (앞쪽) → 상체2 (가슴·등) → 하체2 (뒤쪽) → 상체3 (가슴·팔)'],
+    [6, 'advanced', '상체ㄱ (어깨·등) → 하체ㄱ (앞쪽) → 상체ㄴ (가슴·등) → 하체ㄴ (뒤쪽) → 상체ㄷ (가슴·팔) → 하체ㄷ (종합)'],
+  ];
+  h = '<tr><th>주 횟수</th><th>수준</th><th>기대</th><th>계산 결과</th><th>결과</th></tr>';
+  splits.forEach(([f, lv, exp]) => {
+    const got = Logic.weekPlan(f, lv, 0).map(name).join(' → ');
+    h += `<tr><td>${f}회</td><td>${LEVELS[lv]}</td><td>${exp}</td><td>${got}</td><td>${mark(got === exp)}</td></tr>`;
+  });
+  const w2 = Logic.weekPlan(5, 'intermediate', 5).map(k => name(k).split(' ')[0]).join(' → ');
+  h += `<tr><td>5회 (다음 주)</td><td>중급</td><td>매주 상체1부터 같은 순서</td><td>${w2}</td><td>${mark(w2.startsWith('상체1'))}</td></tr>`;
+  // 연달아 오는 날(한 바퀴 돌아 처음으로 이어지는 경우 포함)에 겹치는 부위가 없는지, 가슴·등이 주 2회인지
+  const groupsOf = k => new Set(Logic.dayExercises(k, 'intermediate').map(id => EX[id].group));
+  [4, 5, 6].forEach(f => {
+    const c = Logic.cycle(f, 'intermediate');
+    const clash = [];
+    c.forEach((k, i) => { const n = c[(i + 1) % c.length]; const a = groupsOf(k), b = groupsOf(n); const both = [...a].filter(x => b.has(x)); if (both.length) clash.push(`${name(k).split(' ')[0]}→${name(n).split(' ')[0]}: ${both.join(',')}`); });
+    h += `<tr><td>${f}회</td><td>연속한 날</td><td>바로 이어지는 두 날에 같은 부위 없음</td><td>${clash.join(' / ') || '겹침 없음'}</td><td>${mark(!clash.length)}</td></tr>`;
+    const cnt = g => c.filter(k => Logic.DAYS[k].area.includes('upper') && groupsOf(k).has(g)).length;
+    if (f >= 5) h += `<tr><td>${f}회</td><td>주간 횟수</td><td>가슴·등 주 2회 이상</td><td>가슴 ${cnt('chest')}회 · 등 ${cnt('back')}회</td><td>${mark(cnt('chest') >= 2 && cnt('back') >= 2)}</td></tr>`;
+  });
+  document.getElementById('t-split').innerHTML = h;
+
+  // ---- 3. 목표 점검 ----
+  const goals = [
+    [{ height: 175, weight: 80, target: 72, weeks: 12, sex: 'male', age: 40, freq: 4 }, false, '주당 0.67kg = 0.83% → 경고 없음'],
+    [{ height: 175, weight: 80, target: 72, weeks: 6, sex: 'male', age: 40, freq: 4 }, true, '주당 1.33kg = 1.67% → 1% 초과 경고'],
+    [{ height: 165, weight: 55, target: 60, weeks: 10, sex: 'female', age: 30, freq: 3 }, true, '증량 주당 0.5kg = 0.91% → 0.5% 초과 경고'],
+  ];
+  h = '<tr><th>입력</th><th>설계서 기준</th><th>계산 결과</th><th>결과</th></tr>';
+  goals.forEach(([p, warn, why]) => {
+    const g = Logic.goalCheck(p, R);
+    h += `<tr><td>${p.weight}→${p.target}kg, ${p.weeks}주</td><td>${why}</td><td>주당 ${g.weekly}kg (${g.pct}%) · 경고 ${g.warn ? '있음' : '없음'}<br><span class="muted">기초대사량 ${g.bmr}kcal</span></td><td>${mark(g.warn === warn)}</td></tr>`;
+  });
+  const b = Logic.bmr({ weight: 80, height: 175, age: 40, sex: 'male' });
+  h += `<tr><td>남 80kg·175cm·40세</td><td>10×80 + 6.25×175 − 5×40 + 5 = 1698.75</td><td>${b}</td><td>${mark(Math.abs(b - 1698.75) < 0.01)}</td></tr>`;
+  document.getElementById('t-goal').innerHTML = h;
+
+  // ---- 4. MET·칼로리 배분 ----
+  const near = (a, b, tol = 0.15) => Math.abs(a - b) <= tol;
+  h = '<tr><th>항목</th><th>기준</th><th>기대값</th><th>계산 결과</th><th>결과</th></tr>';
+  const tm = Logic.acsmTreadmill(5.5, 10);
+  h += `<tr><td>트레드밀 시속 5.5km · 경사 10%</td><td>ACSM 걷기: 3.5 + 0.1×S + 1.8×S×경사 (S=분당 m)</td><td>약 8.3</td><td>${tm.met}</td><td>${mark(near(tm.met, 8.3))}</td></tr>`;
+  const tr = Logic.acsmTreadmill(8, 1);
+  h += `<tr><td>트레드밀 시속 8km · 경사 1%</td><td>ACSM 달리기: 3.5 + 0.2×S + 0.9×S×경사</td><td>약 9.0</td><td>${tr.met}</td><td>${mark(near(tr.met, 9.0))}</td></tr>`;
+  const bk = Logic.acsmBike(100, 80);
+  h += `<tr><td>자전거 100W · 80kg</td><td>ACSM: (7 + 1.8×W×6.12÷체중) ÷ 3.5 / Compendium 90~100W = 6.0</td><td>약 5.9</td><td>${bk.met}</td><td>${mark(near(bk.met, 5.9))}</td></tr>`;
+  const s1 = Logic.strengthMET(EX.leg_ext, 'ok', 20), s2 = Logic.strengthMET(EX.squat, 'ok', 40), s3 = Logic.strengthMET(EX.bench, 'hard', 60);
+  h += `<tr><td>레그 익스텐션 · 적정</td><td>Compendium 02054</td><td>3.5</td><td>${s1.met}</td><td>${mark(s1.met === 3.5)}</td></tr>`;
+  h += `<tr><td>스쿼트 · 적정</td><td>Compendium 02052</td><td>5.0</td><td>${s2.met}</td><td>${mark(s2.met === 5.0)}</td></tr>`;
+  h += `<tr><td>벤치프레스 · 한계 근접</td><td>Compendium 02050 (고강도)</td><td>6.0</td><td>${s3.met}</td><td>${mark(s3.met === 6.0)}</td></tr>`;
+  const P = { height: 175, weight: 80, target: 72, weeks: 12, sex: 'male', age: 40, freq: 4, level: 'intermediate', minutes: 60 };
+  const gg = Logic.goalCheck(P, R);
+  h += `<tr><td>하루 배분 (80→72kg, 12주, 주 4회)</td><td>하루 적자 733 = 운동 30% 220 + 식단 513 / 1회 목표 220×7÷4</td><td>운동 220 · 식단 513 · 1회 385 · 섭취 약 1,525</td>
+    <td>운동 ${gg.exerciseDaily} · 식단 ${gg.dietDeficit} · 1회 ${gg.sessionTarget} · 섭취 ${gg.intake}</td><td>${mark(gg.exerciseDaily === 220 && gg.dietDeficit === 513 && gg.sessionTarget === 385 && Math.abs(gg.intake - 1525) <= 1)}</td></tr>`;
+  const sp = Logic.sessionPlan({ profile: P, dayKey: 'UA' });
+  h += `<tr><td>60분 · 중급 상체A (근력 6개)</td><td>감량 중 시간이 모자라면 작은 운동 세트부터 줄여 유산소 ${R.cardioMinMinutes}분 이상 확보</td><td>유산소 ≥ ${R.cardioMinMinutes}분, 총 ≤ 60분</td>
+    <td>유산소 ${sp.cardio.minutes}분 · 총 ${sp.totalMin}분<br><span class="muted">${sp.trims.join(', ') || '줄인 것 없음'}</span></td><td>${mark(!sp.cardio.skip && sp.cardio.minutes >= R.cardioMinMinutes && sp.totalMin <= 60)}</td></tr>`;
+  const sk = Logic.sessionPlan({ profile: Object.assign({}, P, { target: 80 }), dayKey: 'UA' });
+  h += `<tr><td>같은 조건 · 체중 유지 목표</td><td>유지·증량은 근력을 줄이지 않음(설계서 4-7: 15분 미만이면 다음 날)</td><td>줄인 것 없음</td><td>${sk.trims.length ? sk.trims.join(', ') : '줄인 것 없음'} · 유산소 ${sk.cardio.skip ? '다음 날' : sk.cardio.minutes + '분'}</td><td>${mark(sk.trims.length === 0)}</td></tr>`;
+  document.getElementById('t-kcal').innerHTML = h;
+
+  document.getElementById('summary').innerHTML = `<div class="notice ${pass === total ? 'info' : 'danger'}"><b>${total}개 중 ${pass}개 통과</b></div>`;
+</script>
+</body>
+</html>

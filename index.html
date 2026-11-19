@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>운동관리</title>
+  <meta name="theme-color" content="#0f1115">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="운동관리">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/design.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 1. 첫 설정 -->
+    <section class="screen" id="scr-setup"></section>
+    <!-- 2. 홈 -->
+    <section class="screen" id="scr-home"></section>
+    <!-- 3. 주간 루틴 -->
+    <section class="screen" id="scr-routine"></section>
+    <!-- 4. 운동 진행 -->
+    <section class="screen" id="scr-workout"></section>
+    <!-- 6. 운동 평가 -->
+    <section class="screen" id="scr-eval"></section>
+    <!-- 7. 유산소 진행 -->
+    <section class="screen" id="scr-cardio"></section>
+    <!-- 8. 운동 완료 요약 -->
+    <section class="screen" id="scr-summary"></section>
+    <!-- 9-1. 기록 -->
+    <section class="screen" id="scr-records"></section>
+    <!-- 9-2. 설정 -->
+    <section class="screen" id="scr-settings"></section>
+  </div>
+
+  <!-- 5. 휴식 타이머 (운동 화면 위에 덮어서 표시) -->
+  <div class="overlay" id="ovl-rest"><div class="inner" id="rest-inner"></div></div>
+
+  <!-- 아래 탭 4개 -->
+  <nav class="tabbar" id="tabbar">
+    <div class="tabs">
+      <button data-tab="home" aria-label="홈">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>홈</button>
+      <button data-tab="routine" aria-label="루틴">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>루틴</button>
+      <button data-tab="records" aria-label="기록">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>기록</button>
+      <button data-tab="settings" aria-label="설정">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>설정</button>
+    </div>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- 그래프 도구 (인터넷에서 처음 한 번 받아 오고, 이후에는 휴대폰에 보관된 것을 사용) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/exercises.js"></script>
+  <script src="js/figures.js"></script>
+  <script src="js/logic.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
