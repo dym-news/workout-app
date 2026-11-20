@@ -14,26 +14,31 @@ const DEFAULT_RULES = {
   trimMinSets: 2,        // 시간이 모자랄 때 작은 운동 세트를 몇 세트까지 줄일지
   incBarbellUpper: 2.5,  // 바벨 상체 중량 증가(kg)
   incBarbellLower: 5,    // 바벨 하체 중량 증가(kg)
-  incDumbbell: 2,        // 덤벨 한 칸(kg)
+  incDumbbell: 1,        // 덤벨 한 칸(kg) — 20kg까지
+  incDumbbellHeavy: 2.5, // 덤벨 한 칸(kg) — 20kg 넘으면
+  dumbbellHeavyFrom: 20, // 덤벨 단위가 바뀌는 무게(kg)
   incMachine: 5,         // 머신·케이블 한 칸(kg)
   failDropPct: 10,       // '목표 미달' 중량 감소(%)
   dropStepBarbell: 2.5,  // 줄일 때 바벨 무게 단위(kg) — 원판 1.25kg 양쪽
   dropStepOther: 1,      // 줄일 때 덤벨·머신·케이블 무게 단위(kg)
   hardStreakLimit: 3,    // '한계 근접' 몇 번 연속이면 감소 제안
-  restBeginnerBig: 90,   // 휴식(초) 초보 큰 운동
+  restBeginnerBig: 60,   // 휴식(초) 초보 큰 운동
   restBeginnerSmall: 60, // 휴식(초) 초보 작은 운동
-  restMid: 90,           // 휴식(초) 중급
+  restMid: 60,           // 휴식(초) 중급
   restAdvBig: 120,       // 휴식(초) 상급 큰 운동
-  restAdvSmall: 90,      // 휴식(초) 상급 작은 운동
+  restAdvSmall: 60,      // 휴식(초) 상급 작은 운동
 };
 const RULE_LABELS = {
   lossWarnPct: ['감량 경고 기준', '%/주'], gainWarnPct: ['증량 경고 기준', '%/주'], kcalPerKg: ['체지방 1kg', 'kcal'],
   lifeFactor: ['평소 활동 계수', '배'], exerciseSharePct: ['감량 중 운동 몫', '%'], cardioMinMinutes: ['유산소 최소 시간', '분'], trimMinSets: ['줄일 때 최소 세트', '세트'],
-  incBarbellUpper: ['바벨 상체 증가', 'kg'], incBarbellLower: ['바벨 하체 증가', 'kg'], incDumbbell: ['덤벨 한 칸', 'kg'], incMachine: ['머신·케이블 한 칸', 'kg'],
+  incBarbellUpper: ['바벨 상체 증가', 'kg'], incBarbellLower: ['바벨 하체 증가', 'kg'], incDumbbell: ['덤벨 한 칸 (20kg까지)', 'kg'], incDumbbellHeavy: ['덤벨 한 칸 (20kg 넘으면)', 'kg'], dumbbellHeavyFrom: ['덤벨 단위 바뀌는 무게', 'kg'], incMachine: ['머신·케이블 한 칸', 'kg'],
   failDropPct: ['목표 미달 시 감소', '%'], dropStepBarbell: ['줄일 때 바벨 단위', 'kg'], dropStepOther: ['줄일 때 덤벨·머신 단위', 'kg'], hardStreakLimit: ['한계 근접 연속 기준', '회'],
   restBeginnerBig: ['휴식: 초보 큰 운동', '초'], restBeginnerSmall: ['휴식: 초보 작은 운동', '초'], restMid: ['휴식: 중급', '초'],
   restAdvBig: ['휴식: 상급 큰 운동', '초'], restAdvSmall: ['휴식: 상급 작은 운동', '초'],
 };
+
+// 예전 기본값(설정에 그대로 저장돼 있으면 새 기본값으로 바꿈)
+const OLD_RULE_DEFAULTS = { restBeginnerBig: 90, restMid: 90, restAdvSmall: 90, incDumbbell: 2 };
 
 const LEVELS = { beginner: '초보', intermediate: '중급', advanced: '상급' };
 // 평가: RPE(운동 자각 강도 1~10) · RIR(더 할 수 있었던 횟수) 기준
@@ -144,7 +149,7 @@ const Logic = (() => {
     const pct = Math.abs(weekly) / p.weight * 100;
     const limit = direction === 'loss' ? R.lossWarnPct : R.gainWarnPct;
     const warn = direction !== 'keep' && pct > limit;
-    const b = bmr(p);
+    const b = p.bmrMeasured || bmr(p);   // 인바디로 잰 기초대사량이 있으면 그 값
     const base = b * R.lifeFactor;                          // 운동을 뺀 하루 소모
     const daily = direction === 'keep' ? 0 : weekly * R.kcalPerKg / 7; // 하루 적자(+) 또는 잉여(−)
     let exerciseDaily, sessionTarget = null;
@@ -162,7 +167,7 @@ const Logic = (() => {
       bmr: Math.round(b), base: Math.round(base), exerciseDaily: Math.round(exerciseDaily),
       sessionTarget: sessionTarget == null ? null : Math.round(sessionTarget),
       dailyDelta: Math.round(Math.abs(daily)), dietDeficit: Math.round(dietDeficit),
-      maintain: Math.round(base + exerciseDaily), intake: Math.round(intake), lowIntake: intake < b,
+      maintain: Math.round(base + exerciseDaily), intake: Math.round(intake), lowIntake: intake < b, bmrMeasured: !!p.bmrMeasured,
     };
   }
 
@@ -242,11 +247,28 @@ const Logic = (() => {
     p.repStep = ex.unit === '초' ? 5 : 1;
     return p;
   }
-  function increment(ex, R) {
+  // 다음 번 무게를 올릴 때 한 칸 (덤벨은 20kg까지 1kg, 넘으면 2.5kg)
+  function increment(ex, R, w = 0) {
     if (ex.equip === 'bodyweight') return 0;
     if (ex.equip === 'barbell') return ex.lower ? R.incBarbellLower : R.incBarbellUpper;
-    if (ex.equip === 'dumbbell') return R.incDumbbell;
+    if (ex.equip === 'dumbbell') return w >= R.dumbbellHeavyFrom ? R.incDumbbellHeavy : R.incDumbbell;
     return R.incMachine;
+  }
+  // +/- 버튼 한 번에 바뀌는 무게 (눈금에 맞춰 이동: 14.6 -> 15 / 14)
+  //  덤벨: 20kg까지 1kg, 넘으면 2.5kg (20 -> 22.5 -> 25) / 바벨 2.5kg / 머신·케이블 한 칸
+  function weightStep(ex, w, dir, R) {
+    const up = (g) => round1(Math.floor(w / g + 1e-9) * g + g);
+    const down = (g) => round1(Math.ceil(w / g - 1e-9) * g - g);
+    let v;
+    if (ex.equip === 'dumbbell') {
+      const T = R.dumbbellHeavyFrom;
+      if (dir > 0) v = w < T - 1e-9 ? Math.min(up(R.incDumbbell), T) : up(R.incDumbbellHeavy);
+      else v = w > T + 1e-9 ? Math.max(down(R.incDumbbellHeavy), T) : down(R.incDumbbell);
+    } else {
+      const g = ex.equip === 'barbell' ? R.dropStepBarbell : R.incMachine;
+      v = dir > 0 ? up(g) : down(g);
+    }
+    return Math.max(0, v);
   }
   const isWeighted = ex => ex.equip !== 'bodyweight';
   // 운동 하나 예상 시간(분): 세트당 약 45초 + 세트 사이 휴식 + 준비 1분
@@ -274,7 +296,7 @@ const Logic = (() => {
     let weight = rec.weight, reps = rec.reps;
     let hardStreak = rating === 'hard' ? (rec.hardStreak || 0) + 1 : 0;
     let note = '';
-    const heavier = (w) => ex.assist ? Math.max(0, w - inc) : w + inc; // 어시스트 풀업은 보조 무게가 줄어야 어려워짐
+    const heavier = (w) => ex.assist ? Math.max(0, w - inc) : round1(w + increment(ex, R, w)); // 어시스트 풀업은 보조 무게가 줄어야 어려워짐
     const lighter = (w) => dropWeight(ex, w, R);
     if (!isWeighted(ex)) {
       if (rating === 'easy') { reps += 2 * step; note = `횟수 +${2 * step}`; }
@@ -449,9 +471,102 @@ const Logic = (() => {
     return { next: n, note };
   }
 
+
+  // =========================================================
+  // 인바디(체성분) 판정
+  //  BMI·허리둘레: 대한비만학회(2022) / 체지방률 표준·내장지방 레벨·세포외수분비: InBody 결과지 해석
+  //  복부지방률(허리-엉덩이 비율): WHO / 체수분: 제지방량의 약 73%가 수분(InBody)
+  // =========================================================
+  const BODY_FIELDS = {
+    weight: ['체중', 'kg'], fatPct: ['체지방률', '%'], smm: ['골격근량', 'kg'], tbw: ['체수분', 'L'],
+    ecw: ['세포외수분비', ''], visceral: ['내장지방 레벨', ''], waist: ['허리둘레', 'cm'], whr: ['복부지방률', ''], bmr: ['기초대사량', 'kcal'],
+  };
+  function bodyAssess(r, p, prev) {
+    const male = p.sex !== 'female';
+    const out = [], advice = new Set();
+    const add = (key, value, level, status, std) => out.push({ key, name: BODY_FIELDS[key][0], unit: BODY_FIELDS[key][1], value, level, status, std });
+    const w = r.weight || p.weight;
+    let lv, st;
+    // BMI
+    const bmi = round1(w / Math.pow(p.height / 100, 2));
+    if (bmi < 18.5) { lv = 'caution'; st = '저체중'; advice.add('체중이 적은 편이에요. 단백질과 식사량을 충분히 챙기세요.'); }
+    else if (bmi < 23) { lv = 'good'; st = '정상'; }
+    else if (bmi < 25) { lv = 'caution'; st = '비만 전단계'; advice.add('BMI가 비만 전단계예요. 지금 목표대로 천천히 줄이면 정상 범위가 돼요.'); }
+    else if (bmi < 30) { lv = 'bad'; st = '1단계 비만'; advice.add('BMI가 비만 범위예요. 주당 체중의 0.5~1%씩 꾸준히 줄이는 것을 목표로 하세요.'); }
+    else if (bmi < 35) { lv = 'bad'; st = '2단계 비만'; advice.add('BMI가 2단계 비만이에요. 식단과 운동을 함께 관리하고 필요하면 전문가와 상담하세요.'); }
+    else { lv = 'bad'; st = '3단계 비만'; advice.add('BMI가 3단계 비만이에요. 건강을 위해 전문가 상담을 권해요.'); }
+    out.push({ key: 'bmi', name: 'BMI (체질량지수)', unit: '', value: bmi, level: lv, status: st, std: '정상 18.5~22.9 · 23~24.9 비만 전단계 · 25 이상 비만 (대한비만학회)' });
+    // 체지방률
+    if (r.fatPct != null) {
+      const lo = male ? 10 : 18, hi = male ? 20 : 28, ob = male ? 25 : 30;
+      if (r.fatPct < lo) { lv = 'caution'; st = '낮음'; advice.add('체지방이 너무 낮아요. 무리한 감량은 멈추고 섭취를 늘리세요.'); }
+      else if (r.fatPct <= hi) { lv = 'good'; st = '표준'; }
+      else if (r.fatPct < ob) { lv = 'caution'; st = '높음'; advice.add('체지방을 조금 더 빼면 좋아요. 유산소와 식단 관리를 꾸준히 하세요.'); }
+      else { lv = 'bad'; st = '비만'; advice.add('체지방을 빼야 해요. 하루 섭취 칼로리를 지키고 유산소를 빠뜨리지 마세요.'); }
+      add('fatPct', r.fatPct, lv, st, `표준 ${male ? '남 10~20%' : '여 18~28%'} (InBody) · ${ob}% 이상 비만`);
+    }
+    // 골격근량: 지난 기록과 비교
+    if (r.smm != null) {
+      let s2 = '첫 기록', l2 = 'none';
+      if (prev && prev.smm != null) {
+        const d = round1(r.smm - prev.smm);
+        if (d > 0.1) { s2 = `지난번보다 +${d}kg`; l2 = 'good'; }
+        else if (d < -0.3) { s2 = `지난번보다 ${d}kg`; l2 = 'caution'; advice.add('근육량이 줄었어요. 단백질(체중 1kg당 1.2~1.6g)과 근력 운동을 챙기세요.'); }
+        else { s2 = '유지'; l2 = 'good'; }
+      }
+      add('smm', r.smm, l2, s2, '키·성별마다 기준이 달라 지난 기록과 비교해요. 감량 중에도 유지하는 게 목표예요.');
+    }
+    // 체수분: 제지방량 대비 비율(약 73%)
+    if (r.tbw != null) {
+      if (r.fatPct != null) {
+        const ffm = w * (1 - r.fatPct / 100);
+        const ratio = Math.round(r.tbw / ffm * 1000) / 10;
+        if (ratio < 70) { lv = 'caution'; st = `제지방의 ${ratio}% · 부족할 수 있음`; advice.add('몸의 수분이 부족할 수 있어요. 물을 더 마시세요.'); }
+        else if (ratio > 76) { lv = 'caution'; st = `제지방의 ${ratio}% · 많음`; advice.add('수분 비율이 높아요. 짠 음식을 줄이고 붓기가 있는지 보세요.'); }
+        else { lv = 'good'; st = `제지방의 ${ratio}% · 적정`; }
+        add('tbw', r.tbw, lv, st, '제지방량(체중−체지방)의 약 73%가 수분이면 적정이에요 (InBody).');
+      } else add('tbw', r.tbw, 'none', '기록', '체지방률을 함께 넣으면 수분이 적정한지 알려 드려요.');
+    }
+    // 세포외수분비(부종 지표)
+    if (r.ecw != null) {
+      if (r.ecw > 0.39) { lv = 'bad'; st = '높음 · 부종 가능'; advice.add('세포외수분비가 높아요. 붓기·염분을 확인하고 계속 높으면 진료를 받아 보세요.'); }
+      else if (r.ecw < 0.36) { lv = 'caution'; st = '낮음'; }
+      else { lv = 'good'; st = '정상'; }
+      add('ecw', r.ecw, lv, st, '정상 0.360~0.390 (InBody)');
+    }
+    // 내장지방 레벨
+    if (r.visceral != null) {
+      if (r.visceral < 10) { lv = 'good'; st = '정상'; }
+      else if (r.visceral < 15) { lv = 'caution'; st = '높음'; advice.add('내장지방이 높아요. 술·단 음식·야식을 줄이고 유산소를 늘리세요.'); }
+      else { lv = 'bad'; st = '매우 높음'; advice.add('내장지방이 많이 높아요. 술·단 음식을 줄이고 유산소를 꾸준히 하세요.'); }
+      add('visceral', r.visceral, lv, st, '10 미만 권장 (InBody)');
+    }
+    // 허리둘레
+    if (r.waist != null) {
+      const cut = male ? 90 : 85;
+      if (r.waist >= cut) { lv = 'bad'; st = '복부비만'; advice.add('허리둘레가 복부비만 기준을 넘었어요. 뱃살은 유산소와 식단으로 빠져요.'); }
+      else if (r.waist >= cut - 5) { lv = 'caution'; st = '기준에 가까움'; }
+      else { lv = 'good'; st = '정상'; }
+      add('waist', r.waist, lv, st, `${male ? '남 90cm' : '여 85cm'} 이상 복부비만 (대한비만학회)`);
+    }
+    // 복부지방률(허리-엉덩이 비율)
+    if (r.whr != null) {
+      const cut = male ? 0.90 : 0.85;
+      if (r.whr >= cut) { lv = 'bad'; st = '복부비만'; advice.add('복부지방률이 높아요. 유산소와 식단으로 뱃살을 줄이세요.'); }
+      else if (r.whr >= cut - 0.03) { lv = 'caution'; st = '기준에 가까움'; }
+      else { lv = 'good'; st = '정상'; }
+      add('whr', r.whr, lv, st, `${male ? '남 0.90' : '여 0.85'} 이상 복부비만 (WHO)`);
+    }
+    if (r.bmr != null) add('bmr', r.bmr, 'none', '칼로리 계산에 사용', '공식으로 추정한 값 대신 이 측정값으로 하루 칼로리를 계산해요.');
+    // 하루 물 권장량: 체중 1kg당 약 30~35ml (일반 권장)
+    const water = [Math.round(w * 30 / 100) / 10, Math.round(w * 35 / 100) / 10];
+    if (!advice.size) advice.add('지금처럼 꾸준히 유지하세요!');
+    return { items: out, advice: [...advice], water, bmi };
+  }
+
   return {
-    rules, bmr, goalCheck, DAYS, cycle, splitNote, weekPlan, dayExercises, isLowerDay,
-    prescription, increment, isWeighted, dropWeight, nextRec, calibrated, estMinutes,
+    BODY_FIELDS, bodyAssess, rules, bmr, goalCheck, DAYS, cycle, splitNote, weekPlan, dayExercises, isLowerDay,
+    prescription, increment, weightStep, isWeighted, dropWeight, nextRec, calibrated, estMinutes,
     CARDIO_INT, cardioIntensity, cardioDefaults, cardioMinutes, cardioNext, hrRange, sessionPlan,
     MET_CODES, strengthMET, cardioMET, acsmTreadmill, acsmBike, WARMUP, kcal, netKcal,
   };

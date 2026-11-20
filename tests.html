@@ -27,6 +27,10 @@
   <div class="card"><table id="t-goal"></table></div>
   <h2>4. MET·칼로리 배분</h2>
   <div class="card"><table id="t-kcal"></table></div>
+  <h2>5. 무게 단위·휴식 시간</h2>
+  <div class="card"><table id="t-step"></table></div>
+  <h2>6. 인바디 판정</h2>
+  <div class="card"><table id="t-body"></table></div>
 </div>
 <script src="js/exercises.js"></script>
 <script src="js/logic.js"></script>
@@ -139,6 +143,43 @@
   const sk = Logic.sessionPlan({ profile: Object.assign({}, P, { target: 80 }), dayKey: 'UA' });
   h += `<tr><td>같은 조건 · 체중 유지 목표</td><td>유지·증량은 근력을 줄이지 않음(설계서 4-7: 15분 미만이면 다음 날)</td><td>줄인 것 없음</td><td>${sk.trims.length ? sk.trims.join(', ') : '줄인 것 없음'} · 유산소 ${sk.cardio.skip ? '다음 날' : sk.cardio.minutes + '분'}</td><td>${mark(sk.trims.length === 0)}</td></tr>`;
   document.getElementById('t-kcal').innerHTML = h;
+
+  // ---- 5. 무게 단위·휴식 ----
+  h = '<tr><th>항목</th><th>기대</th><th>계산 결과</th><th>결과</th></tr>';
+  const db = EX.hammer_curl, mc = EX.chest_press, bb = EX.bench;
+  const st = (ex, w, d) => Logic.weightStep(ex, w, d, R);
+  [[db, 2, 1, 3, '덤벨 2kg +'], [db, 19, 1, 20, '덤벨 19kg +'], [db, 20, 1, 22.5, '덤벨 20kg + (2.5 단위로)'], [db, 22.5, -1, 20, '덤벨 22.5kg −'],
+   [db, 14.6, 1, 15, '덤벨 14.6kg + (눈금에 맞춤)'], [db, 14.6, -1, 14, '덤벨 14.6kg −'], [mc, 14.6, 1, 15, '머신 14.6kg +'], [bb, 61, 1, 62.5, '바벨 61kg +']]
+    .forEach(([ex, w, d, exp, t]) => { const got = st(ex, w, d); h += `<tr><td>${t}</td><td>${exp}kg</td><td>${got}kg</td><td>${mark(got === exp)}</td></tr>`; });
+  const dbUp = Logic.nextRec(db, { weight: 8, reps: 15 }, sets(8, [15, 15]), 'easy', Logic.prescription(db, 'beginner', R), R);
+  h += `<tr><td>덤벨 8kg 상한 달성 → 다음 무게</td><td>9kg (1kg 단위)</td><td>${dbUp.weight}kg</td><td>${mark(dbUp.weight === 9)}</td></tr>`;
+  const rests = ['beginner', 'intermediate', 'advanced'].map(lv => [lv, Logic.prescription(EX.squat, lv, R).rest, Logic.prescription(EX.side_lateral, lv, R).rest]);
+  h += `<tr><td>휴식(초) 큰/작은 운동</td><td>초보 60/60 · 중급 60/60 · 상급 120/60</td><td>${rests.map(r => `${LEVELS[r[0]]} ${r[1]}/${r[2]}`).join(' · ')}</td>
+    <td>${mark(rests[0][1] === 60 && rests[0][2] === 60 && rests[1][1] === 60 && rests[1][2] === 60 && rests[2][1] === 120 && rests[2][2] === 60)}</td></tr>`;
+  document.getElementById('t-step').innerHTML = h;
+
+  // ---- 6. 인바디 판정 ----
+  h = '<tr><th>입력</th><th>기준</th><th>기대</th><th>계산 결과</th><th>결과</th></tr>';
+  const man = { sex: 'male', height: 175, weight: 80 }, woman = { sex: 'female', height: 160, weight: 60 };
+  const pick = (a, k) => a.items.find(x => x.key === k);
+  const A1 = Logic.bodyAssess({ weight: 80, fatPct: 26, visceral: 11, waist: 92, whr: 0.93, ecw: 0.392 }, man, null);
+  const chk = (a, k, lv, label, std) => { const x = pick(a, k); h += `<tr><td>${label}</td><td>${std}</td><td>${lv}</td><td>${x.value} → ${x.status} (${x.level})</td><td>${mark(x.level === lv)}</td></tr>`; };
+  chk(A1, 'bmi', 'bad', '남 175cm 80kg BMI', '25 이상 비만 (대한비만학회)');
+  chk(A1, 'fatPct', 'bad', '남 체지방률 26%', '표준 10~20%, 25% 이상 비만');
+  chk(A1, 'visceral', 'caution', '내장지방 레벨 11', '10 미만 권장 (InBody)');
+  chk(A1, 'waist', 'bad', '남 허리둘레 92cm', '90cm 이상 복부비만');
+  chk(A1, 'whr', 'bad', '남 복부지방률 0.93', '0.90 이상 (WHO)');
+  chk(A1, 'ecw', 'bad', '세포외수분비 0.392', '0.390 넘으면 부종 가능 (InBody)');
+  const A2 = Logic.bodyAssess({ weight: 55, fatPct: 24, tbw: 27 }, woman, null);
+  chk(A2, 'bmi', 'good', '여 160cm 55kg BMI', '18.5~22.9 정상');
+  chk(A2, 'fatPct', 'good', '여 체지방률 24%', '표준 18~28%');
+  chk(A2, 'tbw', 'caution', '체수분 27L (제지방 41.8kg)', '제지방의 약 73%가 적정 → 65%면 부족');
+  const A3 = Logic.bodyAssess({ weight: 79, smm: 33.0 }, man, { smm: 33.6 });
+  chk(A3, 'smm', 'caution', '골격근량 33.6 → 33.0kg', '지난번보다 0.3kg 넘게 줄면 주의');
+  h += `<tr><td>조언 문구</td><td>체지방·수분 등 판정에 맞는 조언</td><td>있음</td><td>${A1.advice.length}개 · 물 ${A1.water[0]}~${A1.water[1]}L</td><td>${mark(A1.advice.length >= 3 && A1.water[0] === 2.4)}</td></tr>`;
+  const gB = Logic.goalCheck(Object.assign({}, { height: 175, weight: 80, target: 72, weeks: 12, sex: 'male', age: 40, freq: 4, minutes: 60 }, { bmrMeasured: 1800 }), R);
+  h += `<tr><td>인바디 기초대사량 1800 입력</td><td>공식 대신 측정값 사용</td><td>1800</td><td>${gB.bmr}</td><td>${mark(gB.bmr === 1800)}</td></tr>`;
+  document.getElementById('t-body').innerHTML = h;
 
   document.getElementById('summary').innerHTML = `<div class="notice ${pass === total ? 'info' : 'danger'}"><b>${total}개 중 ${pass}개 통과</b></div>`;
 </script>

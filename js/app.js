@@ -28,9 +28,13 @@ function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2400);
 }
-function stepper(act, val, unit, attrs = '') {
+// +/− 조절 (inputAct를 주면 가운데 숫자를 눌러 직접 입력 가능: 14.6 같은 소수점도)
+function stepper(act, val, unit, attrs = '', inputAct = null) {
+  const mid = inputAct
+    ? `<div class="val"><input class="val-input" type="number" inputmode="decimal" step="any" value="${val}" data-input="${inputAct}" ${attrs} aria-label="직접 입력"><span class="unit"> ${unit}</span></div>`
+    : `<div class="val">${val}<span class="unit"> ${unit}</span></div>`;
   return `<div class="stepper"><button data-act="${act}" data-d="-1" ${attrs} aria-label="줄이기">−</button>
-    <div class="val">${val}<span class="unit"> ${unit}</span></div>
+    ${mid}
     <button data-act="${act}" data-d="1" ${attrs} aria-label="늘리기">+</button></div>`;
 }
 // 평가 버튼: '적정 · RPE 7~8' + 설명
@@ -56,6 +60,53 @@ function beep(times = 2) {
   }
 }
 
+// 크고 반복되는 알림음 (약 sec초 동안)
+function loudBeep(sec = 3) {
+  if (!audioCtx) return;
+  const n = Math.round(sec * 3);
+  for (let i = 0; i < n; i++) {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'square'; o.frequency.value = i % 2 ? 1175 : 880; o.connect(g); g.connect(audioCtx.destination);
+    const t0 = audioCtx.currentTime + i * 0.33;
+    g.gain.setValueAtTime(0.45, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.22);
+    o.start(t0); o.stop(t0 + 0.23);
+  }
+}
+const RING = [500, 150, 500, 150, 500, 150, 900]; // 약 3초 진동
+// 휴대폰 알림 표시줄 (다른 앱을 보고 있을 때)
+function notify(title, body) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted' || !navigator.serviceWorker) return;
+    navigator.serviceWorker.ready.then(reg => reg.showNotification(title, { body, tag: 'workout', renotify: true, requireInteraction: true, vibrate: RING, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png' }));
+  } catch (e) { /* 알림 불가 */ }
+}
+function askNotify() { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) { /* 무시 */ } }
+// 놓치지 않는 알림: 진동 3초 + 큰 소리 3초 + 깜빡이는 팝업(누를 때까지) + 8초마다 최대 3번 다시 알림
+function strongAlert(title, msg) {
+  stopAlert();
+  const el = $('#alert-pop');
+  el.innerHTML = `<h2>${title}</h2><p>${msg}</p><button class="btn big" data-act="alertOk">확인</button>`;
+  el.classList.add('active');
+  const ring = () => { vibrate(RING); loudBeep(3); };
+  ring();
+  let count = 1;
+  S.alertTimer = setInterval(() => { if (++count > 4) return stopAlert(true); ring(); }, 8000);
+  if (document.hidden) notify(title, msg);
+}
+function stopAlert(keepPopup) {
+  if (S.alertTimer) { clearInterval(S.alertTimer); S.alertTimer = null; }
+  vibrate(0);
+  if (!keepPopup) $('#alert-pop').classList.remove('active');
+}
+// 운동하는 동안 화면이 꺼지지 않게
+async function keepAwake(on) {
+  try {
+    if (on && !S.wake && 'wakeLock' in navigator && !document.hidden) { S.wake = await navigator.wakeLock.request('screen'); S.wake.addEventListener('release', () => { S.wake = null; }); }
+    if (!on && S.wake) { await S.wake.release(); S.wake = null; }
+  } catch (e) { /* 지원 안 함 */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.workout) keepAwake(true); });
+
 // ---------- 저장 ----------
 async function loadAll() {
   S.profile = await DB.get('profile', 'me');
@@ -64,6 +115,7 @@ async function loadAll() {
   S.strength = await DB.all('strength');
   S.cardio = await DB.all('cardio');
   S.weights = (await DB.all('weight')).sort((a, b) => a.date.localeCompare(b.date));
+  S.body = (await DB.all('body')).sort((a, b) => a.date.localeCompare(b.date));
 }
 function saveDraft() { try { if (S.workout) localStorage.setItem('workout-draft', JSON.stringify(S.workout)); else localStorage.removeItem('workout-draft'); } catch (e) { /* 저장 불가 */ } }
 function loadDraft() { try { const d = localStorage.getItem('workout-draft'); return d ? JSON.parse(d) : null; } catch (e) { return null; } }
@@ -127,6 +179,7 @@ function go(name) {
   $('#app').classList.toggle('no-tabs', !tabs);
   document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   S.screen = name;
+  keepAwake(!!S.workout && ['workout', 'eval', 'cardio'].includes(name));
   RENDER[name]();
   window.scrollTo(0, 0);
 }
@@ -205,7 +258,7 @@ function goalCard(v, g, R) {
     ${g.warn ? `<div class="notice warn"><b>기간을 늘리는 것을 권장합니다.</b><br>${dirName} 권장 한도는 주당 체중의 ${g.direction === 'loss' ? R.lossWarnPct : R.gainWarnPct}%예요.</div>` : ''}
     <div class="kv" style="margin-top:var(--sp-3)">${rows}</div>
     ${g.lowIntake ? '<div class="notice warn">섭취 칼로리가 기초대사량보다 낮아요. 기간을 늘리는 것을 권장합니다.</div>' : ''}
-    <p class="xs muted" style="margin-bottom:0">기초대사량 약 ${kc(g.bmr)}kcal(미플린-세인트 조어 공식) × 평소 활동 ${R.lifeFactor}배. 운동 몫·활동 계수는 설정 → 추천 기준 수치에서 바꿀 수 있어요.</p>
+    <p class="xs muted" style="margin-bottom:0">기초대사량 약 ${kc(g.bmr)}kcal(${g.bmrMeasured ? '인바디 측정값' : '미플린-세인트 조어 공식'}) × 평소 활동 ${R.lifeFactor}배. 운동 몫·활동 계수는 설정 → 추천 기준 수치에서 바꿀 수 있어요.</p>
   </div>`;
 }
 function updateGoalBox() {
@@ -287,6 +340,7 @@ RENDER.home = () => {
     </div>
     <div class="card">
       <div class="card-title">체중 <span class="side">${fmt(lastW)}kg → 목표 ${fmt(p.target)}kg</span></div>
+      ${bodySummaryLine()}
       <div class="chart-box mini"><canvas id="chart-mini"></canvas></div>
       <button class="btn small" data-act="tab" data-to="records" style="margin-top:var(--sp-3)">체중 기록하기</button>
     </div>`;
@@ -309,13 +363,14 @@ RENDER.routine = () => {
     const d = Logic.DAYS[key];
     const ids = Logic.dayExercises(key, p.level, sb);
     const status = i < done ? '<span class="tag success">완료</span>' : (i === done ? '<span class="tag primary">다음</span>' : '');
-    return `<details class="card" ${i === done ? 'open' : ''}>
+    return `<details class="card" ${i === done || S.form.rtOpen === key ? 'open' : ''}>
       <summary><span class="row" style="gap:var(--sp-2)"><span class="muted">${i + 1}</span> ${d.name} ${status}</span></summary>
       <p class="small muted" style="margin-top:0">${d.parts}</p>
       <ul class="list">${ids.map(id => {
         const ex = EX[id], pr = Logic.prescription(ex, p.level, R), o = origOf(id);
         return `<li><div class="item"><span class="title">${ex.name}</span><span class="side">${pr.sets}세트<br>${pr.lo}~${pr.hi}${pr.unit}</span>
           <span class="sub">휴식 ${pr.rest}초 · ${EQUIP_NAME[ex.equip]}</span>
+          <div class="extra">${nextTargetRow(id, key, pr)}</div>
           ${o ? `<div class="extra"><div class="small" style="color:var(--warning)">대체한 운동 · 원래: ${EX[o].name}</div>
             <button class="btn small" style="margin-top:var(--sp-2)" data-act="revert" data-orig="${o}">원래 운동으로 되돌리기</button></div>` : ''}</div></li>`;
       }).join('')}</ul></details>`;
@@ -331,6 +386,106 @@ RENDER.routine = () => {
     </div>
     ${week.map(dayCard).join('')}`;
 };
+
+// 루틴 화면: 운동별 다음 목표 (보기·고치기)
+function nextTargetRow(id, dayKey, pr) {
+  const ex = EX[id], n = S.next[id], weighted = Logic.isWeighted(ex);
+  const e = S.form.rtEdit && S.form.rtEdit.id === id ? S.form.rtEdit : null;
+  if (e) return `<div class="card tight" style="margin:var(--sp-2) 0 0">
+      <div class="small bold">다음 목표 고치기</div>
+      ${weighted ? ctlRow(ex.assist ? '보조 무게' : '무게', stepper('rtW', fmt(e.w), 'kg', '', 'inRtW')) : ''}
+      ${ctlRow(pr.unit === '초' ? '시간' : '횟수', stepper('rtR', e.r, pr.unit, `data-step="${pr.repStep}"`, 'inRtR'))}
+      <div class="btn-row" style="margin-top:var(--sp-2)"><button class="btn small" data-act="rtCancel">취소</button><button class="btn small primary" data-act="rtSave">저장</button></div></div>`;
+  const txt = n ? `${weighted ? wLabel(ex, n.weight) + ' × ' : ''}${n.reps}${pr.unit}` : '처음 · 기준 중량 찾기';
+  return `<div class="row between small"><span><span class="muted">다음 목표</span> <b>${txt}</b> ${n && n.manual ? '<span class="tag primary">직접 정함</span>' : ''}</span>
+    <button class="btn small" data-act="rtEdit" data-id="${id}" data-day="${dayKey}">수정</button></div>`;
+}
+
+// =========================================================
+// 인바디(체성분) 기록
+// =========================================================
+const BODY_HINT = {
+  weight: '체중(Weight)', fatPct: '체지방률(PBF)', smm: '골격근량(SMM)', tbw: '체수분(TBW)', ecw: '세포외수분비(ECW/TBW) 예: 0.380',
+  visceral: '내장지방레벨', waist: '허리둘레 — 결과지에 없으면 줄자로 배꼽 높이', whr: '복부지방률(WHR) 예: 0.88', bmr: '기초대사량(BMR)',
+};
+const latestBody = () => S.body && S.body.length ? S.body[S.body.length - 1] : null;
+function prevBody(r) { const i = S.body.indexOf(r); return i > 0 ? S.body[i - 1] : null; }
+function bodySummaryLine() {
+  const r = latestBody(); if (!r) return '';
+  const a = Logic.bodyAssess(r, S.profile, prevBody(r));
+  const bad = a.items.filter(x => x.level === 'bad' || x.level === 'caution');
+  return `<p class="small" style="margin:-4px 0 var(--sp-2)"><span class="muted">최근 인바디 ${r.date.slice(5).replace('-', '/')}:</span>
+    ${bad.length ? bad.slice(0, 3).map(x => `<span class="lv-${x.level}"><span class="lv-dot ${x.level}"></span>${x.name.split(' ')[0]} ${x.status}</span>`).join(' · ') : '<span class="lv-good"><span class="lv-dot good"></span>모두 정상</span>'}</p>`;
+}
+function bodyCard() {
+  const r = latestBody();
+  const today = ymd();
+  const form = S.form.bodyOpen ? `<div class="card tight" style="background:var(--surface-2);margin-top:var(--sp-3)">
+      <div class="field"><label for="b-date">측정 날짜</label><input type="date" id="b-date" value="${today}" max="${today}"></div>
+      <div class="grid2">${Object.entries(Logic.BODY_FIELDS).map(([k, [name, unit]]) => `
+        <div class="field"><label for="b-${k}">${name} ${unit ? `<span class="muted">(${unit})</span>` : ''}</label>
+        <input id="b-${k}" type="number" inputmode="decimal" step="any" placeholder="${k === 'weight' && S.weights.length ? fmt(S.weights[S.weights.length - 1].kg) : ''}">
+        <div class="hint">${BODY_HINT[k]}</div></div>`).join('')}</div>
+      <p class="xs muted">아는 항목만 넣어도 돼요. 같은 조건(아침 공복, 화장실 다녀온 뒤)에서 재야 비교가 정확해요.</p>
+      <div class="btn-row"><button class="btn" data-act="bodyOpen">취소</button><button class="btn primary" data-act="bodySave">저장</button></div></div>` : '';
+  if (!r) return `<div class="card"><div class="card-title">인바디 기록</div>
+    <p class="small muted" style="margin-top:0">인바디 결과지를 입력하면 BMI·체지방·복부비만·수분 상태를 색깔로 알려 드려요.</p>
+    ${S.form.bodyOpen ? '' : '<button class="btn primary" data-act="bodyOpen">＋ 인바디 입력</button>'}${form}</div>`;
+  const a = Logic.bodyAssess(r, S.profile, prevBody(r));
+  const metrics = ['weight', 'fatPct', 'smm', 'visceral', 'waist', 'bmi'].filter(k => k === 'bmi' ? S.body.some(b => b.weight) : S.body.some(b => b[k] != null));
+  if (!S.form.bodyMetric || !metrics.includes(S.form.bodyMetric)) S.form.bodyMetric = metrics.includes('fatPct') ? 'fatPct' : metrics[0];
+  const mName = k => ({ weight: '체중', fatPct: '체지방률', smm: '근육량', visceral: '내장지방', waist: '허리', bmi: 'BMI' })[k];
+  return `<div class="card">
+    <div class="card-title">인바디 결과 <span class="side">${korDate(r.date)}</span></div>
+    ${a.items.map(x => `<div class="assess"><span class="name"><span class="lv-dot ${x.level}"></span>${x.name}</span>
+      <span class="val">${x.value}${x.unit ? ' ' + x.unit : ''} <span class="small lv-${x.level}">${x.status}</span></span>
+      <span class="std">${x.std}</span></div>`).join('')}
+    <div class="notice info" style="margin-bottom:0"><b>이렇게 해 보세요</b><ul style="margin:var(--sp-1) 0 0">${a.advice.map(t => `<li>${t}</li>`).join('')}
+      <li>하루 물 권장량 약 <b>${a.water[0]}~${a.water[1]}L</b> (체중 1kg당 30~35ml), 운동한 날은 더 마시세요.</li></ul></div>
+    ${metrics.length ? `<div class="choice wrap3" style="margin-top:var(--sp-4)">${metrics.map(k => `<button class="${S.form.bodyMetric === k ? 'on' : ''}" data-act="bodyMetric" data-val="${k}">${mName(k)}</button>`).join('')}</div>
+      <div class="chart-box" style="margin-top:var(--sp-3)"><canvas id="chart-body"></canvas></div>` : ''}
+    ${S.form.bodyOpen ? '' : '<button class="btn primary" data-act="bodyOpen" style="margin-top:var(--sp-3)">＋ 새 인바디 입력</button>'}${form}
+    <details style="margin-top:var(--sp-3)"><summary class="small">인바디 기록 목록 (${S.body.length})</summary><ul class="list small">${[...S.body].reverse().map(b => `<li><div class="item"><span>${b.date}</span>
+      <span class="side">${b.weight != null ? fmt(b.weight) + 'kg' : ''} ${b.fatPct != null ? '· ' + b.fatPct + '%' : ''} <button class="btn small" data-act="bodyDel" data-date="${b.date}">삭제</button></span></div></li>`).join('')}</ul></details>
+    <p class="xs muted" style="margin-bottom:0">기준: BMI·허리둘레 대한비만학회(2022) · 체지방률·내장지방·세포외수분비 InBody 결과지 해석 · 복부지방률 WHO. 참고용이며 진단이 아니에요.</p>
+  </div>`;
+}
+async function saveBody() {
+  const date = $('#b-date').value || ymd();
+  const rec = { date };
+  for (const k of Object.keys(Logic.BODY_FIELDS)) { const v = num($('#b-' + k).value); if (v != null && v > 0) rec[k] = v; }
+  if (Object.keys(rec).length < 2) { toast('한 가지 이상 입력해 주세요'); return; }
+  await DB.put('body', rec);
+  if (rec.weight) await DB.put('weight', { date, kg: Math.round(rec.weight * 10) / 10 });
+  await loadAll();
+  const last = S.weights[S.weights.length - 1];
+  if (last && last.kg !== S.profile.weight) S.profile.weight = last.kg;
+  await syncBmr();
+  S.form.bodyOpen = false;
+  toast('인바디 기록을 저장했어요');
+  rerender();
+}
+// 가장 최근에 잰 기초대사량을 칼로리 계산에 사용
+async function syncBmr() {
+  const withBmr = S.body.filter(b => b.bmr);
+  const v = withBmr.length ? withBmr[withBmr.length - 1].bmr : null;
+  if (v) S.profile.bmrMeasured = v; else delete S.profile.bmrMeasured;
+  await DB.put('profile', S.profile);
+}
+function drawBodyChart() {
+  const cv = document.getElementById('chart-body');
+  if (!cv || !window.Chart) return;
+  if (S.charts.body) { S.charts.body.destroy(); delete S.charts.body; }
+  const k = S.form.bodyMetric;
+  const rows = S.body.map(b => ({ d: b.date, v: k === 'bmi' ? (b.weight ? Math.round(b.weight / Math.pow(S.profile.height / 100, 2) * 10) / 10 : null) : b[k] })).filter(x => x.v != null);
+  const text = cssVar('--text-muted'), line = cssVar('--line'), primary = cssVar('--primary');
+  S.charts.body = new Chart(cv, {
+    type: 'line',
+    data: { labels: rows.map(x => x.d.slice(5).replace('-', '/')), datasets: [{ label: k === 'bmi' ? 'BMI' : Logic.BODY_FIELDS[k][0], data: rows.map(x => x.v), borderColor: primary, backgroundColor: primary, tension: 0.3, pointRadius: 4, borderWidth: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: text, maxTicksLimit: 6 }, grid: { color: line } }, y: { ticks: { color: text, maxTicksLimit: 6 }, grid: { color: line } } } },
+  });
+}
 
 async function revertSub(orig) {
   const sb = subs();
@@ -356,7 +511,7 @@ function makeItem(exId, setsCount) {
   return { exId, presc, calib, sets: Array.from({ length: n }, () => ({ w, r, done: false })), rating: null, startedAt: null, endedAt: null, applyDrop: false, found: null };
 }
 function startWorkout() {
-  unlockAudio();
+  unlockAudio(); askNotify();
   const t = planToday();
   S.workout = { id: Date.now(), start: Date.now(), dayKey: t.dayKey, phase: 'warmup', warm: { start: null, minutes: 0 }, items: t.items.map(it => makeItem(it.id, it.sets)), idx: 0, cardio: null, showAlt: false, targetNet: t.targetNet };
   saveDraft();
@@ -402,8 +557,8 @@ RENDER.workout = () => {
     const recTxt = setLabel(ex, { w: it.calib ? ex.start : (rec ? rec.weight : s.w), r: it.calib ? it.presc.lo : (rec ? rec.reps : s.r) }, unit);
     return `<div class="set-row current">
       <div class="head"><b>${i + 1}세트 · 지금</b><span>추천 ${recTxt}</span></div>
-      ${weighted ? ctlRow(ex.assist ? '보조 무게' : '중량', stepper('setW', fmt(s.w), 'kg', `data-i="${i}" data-step="${inc}"`)) : ''}
-      ${ctlRow(unit === '초' ? '시간' : '횟수', stepper('setR', s.r, unit, `data-i="${i}" data-step="${it.presc.repStep}"`))}
+      ${weighted ? ctlRow(ex.assist ? '보조 무게' : '중량', stepper('setW', fmt(s.w), 'kg', `data-i="${i}"`, 'inSetW')) : ''}
+      ${ctlRow(unit === '초' ? '시간' : '횟수', stepper('setR', s.r, unit, `data-i="${i}" data-step="${it.presc.repStep}"`, 'inSetR'))}
     </div>`;
   }).join('');
 
@@ -415,6 +570,7 @@ RENDER.workout = () => {
       ? `가벼운 무게(${ex.equip === 'barbell' ? '빈 봉' : '가장 가벼운 무게'})부터 세트마다 조금씩 올려 보세요. 목표 ${it.presc.lo}${unit}를 <b>2~3회 여유 있게</b> 할 수 있는 무게를 찾으면 돼요.`
       : '편하게 할 수 있는 만큼 하고 실제 횟수를 기록하세요. 그 횟수가 다음부터의 기준이 돼요.'}</div>` : ''}
     ${FIG.pair(ex.id)}
+    ${MUSCLE.card(ex.id)}
     <div class="row between" style="margin:var(--sp-3) 0">
       <a href="${youtubeLink(ex)}" target="_blank" rel="noopener" class="small">▶ 유튜브 자세 영상</a>
       <span class="xs muted">${it.presc.sets}세트 × ${it.presc.lo}~${it.presc.hi}${unit} · 휴식 ${it.presc.rest}초</span>
@@ -433,15 +589,18 @@ RENDER.workout = () => {
     ${actionBar(curSet >= 0 ? `<button class="btn success big" data-act="setDone">${curSet + 1}세트 완료</button>` : '<button class="btn primary big" data-act="toEval">평가하기</button>')}`;
 };
 
-function adjustSet(field, i, d, step) {
+// 세트 무게·횟수 바꾸기 (지금 세트와 남은 세트에 같이 적용)
+//  무게 +/−: 덤벨 20kg까지 1kg, 넘으면 2.5kg / 바벨 2.5kg / 머신 한 칸
+function setSetValue(field, i, v) {
   const it = curItem();
-  for (let k = i; k < it.sets.length; k++) {
-    if (it.sets[k].done) continue;
-    let v = it.sets[k][field] + d * step;
-    v = field === 'w' ? Math.max(0, Math.round(v * 10) / 10) : Math.max(1, v);
-    it.sets[k][field] = v;
-  }
+  v = field === 'w' ? Math.max(0, Math.round(v * 10) / 10) : Math.max(1, Math.round(v));
+  for (let k = i; k < it.sets.length; k++) if (!it.sets[k].done) it.sets[k][field] = v;
   saveDraft(); rerender();
+}
+function adjustSet(field, i, d, step) {
+  const it = curItem(), s = it.sets[i];
+  if (field === 'w') setSetValue('w', i, Logic.weightStep(EX[it.exId], s.w, d, rules()));
+  else setSetValue('r', i, s.r + d * step);
 }
 
 function setDone() {
@@ -460,7 +619,7 @@ function setDone() {
 
 // 5. 휴식 타이머
 function startRest(sec) {
-  S.rest = { end: Date.now() + sec * 1000, total: sec };
+  S.rest = { end: Date.now() + sec * 1000, total: sec, warned: sec <= 12 };
   renderRest();
   $('#ovl-rest').classList.add('active');
 }
@@ -477,7 +636,7 @@ function renderRest() {
     <div class="ring"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="44"/><circle class="prog" id="rest-ring" cx="50" cy="50" r="44" stroke-dasharray="276.5" stroke-dashoffset="0"/></svg><div class="timer" id="rest-timer">${mmss(left)}</div></div>
     <div class="btn-row"><button class="btn big" data-act="restAdj" data-d="-30">−30초</button><button class="btn big" data-act="restAdj" data-d="30">+30초</button></div>
     <button class="btn primary big" data-act="restSkip" style="margin-top:var(--sp-3)">건너뛰기</button>
-    <p class="xs muted center" style="margin-top:var(--sp-4)">끝나면 진동과 소리로 알려 드려요.<br>(아이폰은 진동을 지원하지 않아 소리만 나요)</p>`;
+    <p class="xs muted center" style="margin-top:var(--sp-4)">10초 전에 짧게, 끝나면 <b>진동 3초 + 소리 + 화면 팝업</b>으로 알려 드려요.<br>다른 앱을 보고 있으면 휴대폰 알림으로도 알려요.</p>`;
   updateRestRing();
 }
 function updateRestRing() {
@@ -487,9 +646,13 @@ function updateRestRing() {
   const r = $('#rest-ring'); if (r) r.setAttribute('stroke-dashoffset', (276.5 * (1 - left / Math.max(S.rest.total, left))).toFixed(1));
 }
 function endRest(alert) {
-  if (alert) { vibrate([400, 150, 400]); beep(2); }
   S.rest = null;
   $('#ovl-rest').classList.remove('active');
+  if (alert) {
+    const it = S.workout && S.workout.items && curItem();
+    const n = it ? it.sets.findIndex(s => !s.done) + 1 : 0;
+    strongAlert('휴식 끝!', it && n ? `${EX[it.exId].name} ${n}세트를 시작하세요` : '다음 세트를 시작하세요');
+  }
 }
 
 // 대체 운동 (4-10)
@@ -516,11 +679,16 @@ function computeResult(it) {
   if (!it.rating) return null;
   const ex = EX[it.exId], R = rules();
   const doneSets = it.sets.filter(s => s.done);
-  if (it.calib) return Logic.calibrated(ex, doneSets, it.presc, it.rating, it.found ?? (doneSets.length ? doneSets[doneSets.length - 1].w : ex.start), R);
-  const rec = S.next[it.exId];
-  const actualW = doneSets.length ? doneSets[doneSets.length - 1].w : rec.weight;
-  let res = Logic.nextRec(ex, { weight: actualW, reps: rec.reps, hardStreak: rec.hardStreak || 0 }, doneSets, it.rating, it.presc, R);
-  if (res.suggestDrop && it.applyDrop) res = Object.assign({}, res, { weight: res.dropTo, hardStreak: 0, note: `${res.note} → ${R.failDropPct}% 감소 적용` });
+  let res;
+  if (it.calib) res = Logic.calibrated(ex, doneSets, it.presc, it.rating, doneSets.length ? doneSets[doneSets.length - 1].w : ex.start, R);
+  else {
+    const rec = S.next[it.exId];
+    const actualW = doneSets.length ? doneSets[doneSets.length - 1].w : rec.weight;
+    res = Logic.nextRec(ex, { weight: actualW, reps: rec.reps, hardStreak: rec.hardStreak || 0 }, doneSets, it.rating, it.presc, R);
+    if (res.suggestDrop && it.applyDrop) res = Object.assign({}, res, { weight: res.dropTo, hardStreak: 0, note: `${res.note} → ${R.failDropPct}% 감소 적용` });
+  }
+  // 내가 직접 고친 다음 목표
+  if (it.override) res = Object.assign({}, res, { weight: it.override.weight, reps: it.override.reps, manual: true, auto: { weight: res.weight, reps: res.reps } });
   return res;
 }
 
@@ -531,7 +699,6 @@ RENDER.eval = () => {
   const unit = it.presc.unit;
   const doneSets = it.sets.filter(s => s.done);
   const weighted = Logic.isWeighted(ex);
-  if (it.calib && weighted && it.found == null) it.found = doneSets.length ? doneSets[doneSets.length - 1].w : ex.start;
   const res = computeResult(it);
   const isLast = w.idx >= w.items.length - 1;
   const R = rules();
@@ -539,16 +706,16 @@ RENDER.eval = () => {
     <div class="eyebrow">${Logic.DAYS[w.dayKey].name} · 근력 ${w.idx + 1} / ${w.items.length}</div>
     <h1>${ex.name}<br>어땠나요?</h1>
     <div class="card tight"><div class="kv">${doneSets.map((s, i) => `<span>${i + 1}세트</span><span>${setLabel(ex, s, unit)}</span>`).join('') || '<span>기록된 세트가 없어요</span><span></span>'}</div></div>
-    ${it.calib && weighted ? `<div class="card"><div class="card-title">찾은 기준 중량</div><p class="small muted" style="margin-top:0">목표 횟수를 2~3회 여유 있게 할 수 있었던 무게로 맞춰 주세요.</p>
-      ${ctlRow('기준 중량', stepper('foundW', fmt(it.found), 'kg', `data-step="${Logic.increment(ex, R)}"`))}</div>` : ''}
     <p class="xs muted" style="margin-bottom:var(--sp-2)">RPE: 느낀 힘든 정도(1~10) · RIR: 더 할 수 있었던 횟수</p>
     <div class="choice col">
       ${Object.entries(RATINGS).map(([k, t]) => ratingBtn('rate', k, it.rating, RATING_DESC)).join('')}
     </div>
     ${res ? `<div class="card" style="margin-top:var(--sp-3)">
-      <div class="eyebrow">다음 번 추천</div>
-      <div class="num" style="margin:var(--sp-1) 0">${weighted ? wLabel(ex, res.weight) + ' × ' : ''}${res.reps}${unit}</div>
-      <p class="small muted" style="margin:0">${res.note}</p>
+      <div class="card-title">다음 번 목표 ${res.manual ? '<span class="tag primary">직접 정함</span>' : '<span class="tag">앱 추천</span>'}</div>
+      ${weighted ? ctlRow(ex.assist ? '보조 무게' : '무게', stepper('nextW', fmt(res.weight), 'kg', '', 'inNextW')) : ''}
+      ${ctlRow(unit === '초' ? '시간' : '횟수', stepper('nextR', res.reps, unit, `data-step="${it.presc.repStep}"`, 'inNextR'))}
+      <p class="small muted" style="margin:var(--sp-2) 0 0">${res.manual ? `앱 추천은 ${weighted ? wLabel(ex, res.auto.weight) + ' × ' : ''}${res.auto.reps}${unit}였어요. 직접 느낀 대로 정한 값으로 저장돼요.` : res.note + ' · 직접 느낀 대로 고쳐도 돼요.'}</p>
+      ${res.manual ? '<button class="btn small" data-act="nextReset" style="margin-top:var(--sp-2)">앱 추천으로 되돌리기</button>' : ''}
       ${res.suggestDrop ? `<div class="notice warn">'한계 근접(RPE 9~10)'이 ${R.hardStreakLimit}회 연속이에요. 중량을 ${R.failDropPct}% 줄여 ${wLabel(ex, res.dropTo)}(으)로 하는 것을 제안해요.
         <button class="btn small" style="margin-top:var(--sp-2)" data-act="toggleDrop">${it.applyDrop ? '감소 취소' : `${R.failDropPct}% 줄이기 적용`}</button></div>` : ''}
     </div>` : ''}
@@ -664,10 +831,10 @@ RENDER.cardio = () => {
   const estNet = Logic.netKcal(cm.met, kg, c.minutes);
   const hasWatts = c.exId === 'bike' || c.exId === 'rower';
   const ctl = ex.ctl === 'speed'
-    ? ctlRow('속도', stepper('cSet', fmt(c.set.speed), 'km/h', 'data-k="speed" data-step="0.5"')) + ctlRow('경사', stepper('cSet', c.set.incline, '%', 'data-k="incline" data-step="1"'))
-    : ctlRow(c.intensity === 'high' ? '빠르게 단계' : '저항 단계', stepper('cSet', c.set.level, '단계', 'data-k="level" data-step="1"'))
-      + (c.intensity === 'high' ? ctlRow('천천히 단계', stepper('cSet', c.set.easyLevel, '단계', 'data-k="easyLevel" data-step="1"')) : '')
-      + (hasWatts ? ctlRow(`${c.intensity === 'high' ? '빠르게 ' : ''}와트(W)<br><span class="xs">기계에 나오면 입력</span>`, stepper('cSet', c.set.watts || 0, 'W', 'data-k="watts" data-step="10"')) : '');
+    ? ctlRow('속도', stepper('cSet', fmt(c.set.speed), 'km/h', 'data-k="speed" data-step="0.5"', 'inCSet')) + ctlRow('경사', stepper('cSet', c.set.incline, '%', 'data-k="incline" data-step="1"', 'inCSet'))
+    : ctlRow(c.intensity === 'high' ? '빠르게 단계' : '저항 단계', stepper('cSet', c.set.level, '단계', 'data-k="level" data-step="1"', 'inCSet'))
+      + (c.intensity === 'high' ? ctlRow('천천히 단계', stepper('cSet', c.set.easyLevel, '단계', 'data-k="easyLevel" data-step="1"', 'inCSet')) : '')
+      + (hasWatts ? ctlRow(`${c.intensity === 'high' ? '빠르게 ' : ''}와트(W)<br><span class="xs">기계에 나오면 입력</span>`, stepper('cSet', c.set.watts || 0, 'W', 'data-k="watts" data-step="10"', 'inCSet')) : '');
   $('#scr-cardio').innerHTML = `
     <div class="row between"><span class="tag primary">유산소 · ${I.name}</span><button class="btn small" data-act="endEarly">운동 끝내기</button></div>
     <h1 style="margin-top:var(--sp-3)">${ex.name}</h1>
@@ -679,9 +846,10 @@ RENDER.cardio = () => {
     </div>
     <p class="xs muted" style="margin-top:0">최대 심박수 약 ${hr.maxHR}회/분(220−나이)의 ${I.hr[0]}~${I.hr[1]}% · 느낌: ${I.feel}<br>강도 수치 MET ${cm.met} — ${cm.src}</p>
     ${FIG.pair(ex.id)}
+    ${MUSCLE.card(ex.id)}
     <div class="card" style="margin-top:var(--sp-3)">${ctl}
       ${c.intensity === 'high' ? '<p class="xs muted" style="margin-bottom:0">2분 준비 → (30초 빠르게 + 90초 천천히) × 8회 → 2분 정리</p>'
-        : ctlRow('목표 시간', stepper('cMin', c.minutes, '분', 'data-step="5"'))}
+        : ctlRow('목표 시간', stepper('cMin', c.minutes, '분', 'data-step="5"', 'inCMin'))}
     </div>
     ${g.direction === 'loss' && c.intensity !== 'high' ? `<div class="notice info slim">오늘 목표까지 남은 열량 약 ${kc(c.needNet)}kcal → 이 설정이면 약 ${c.want}분이 필요해요.${c.limited ? ` 남은 시간이 ${c.fitMin}분이라 ${c.minutes}분으로 줄였어요.` : ''} 속도·경사·와트를 바꾸면 시간이 다시 계산돼요.</div>` : ''}
     <div class="card center">
@@ -757,7 +925,7 @@ async function saveSession() {
     if (r.cardio) continue;
     const it = r.it;
     await DB.put('strength', Object.assign({}, base, { exId: it.exId, sets: it.sets.filter(x => x.done).map(x => ({ w: x.w, r: x.r })), unit: it.presc.unit, rating: it.rating, calib: it.calib, minutes: Math.round(r.min), kcal: Math.round(r.kcal), net: Math.round(r.net), met: r.met }));
-    if (it.result) await DB.put('next', { key: it.exId, weight: it.result.weight, reps: it.result.reps, hardStreak: it.result.hardStreak || 0, updated: date });
+    if (it.result) await DB.put('next', { key: it.exId, weight: it.result.weight, reps: it.result.reps, hardStreak: it.result.hardStreak || 0, manual: !!it.result.manual, updated: date });
   }
   const c = w.cardio;
   const cr = s.rows.find(r => r.cardio);
@@ -772,7 +940,7 @@ async function saveSession() {
   }
   S.routine.pointer += 1;
   await DB.put('routine', S.routine);
-  S.workout = null; saveDraft();
+  S.workout = null; saveDraft(); keepAwake(false);
   await loadAll();
   toast('운동 기록을 저장했어요');
   go('home');
@@ -800,11 +968,12 @@ RENDER.records = () => {
       <span class="sub">${r.sets.map(s => setLabel(ex, s, r.unit || '회')).join(', ')}</span></div>`;
   };
   $('#scr-records').innerHTML = `
-    <div class="eyebrow">기록</div><h1>체중과 운동 기록</h1>
+    <div class="eyebrow">기록</div><h1>몸과 운동 기록</h1>
+    ${bodyCard()}
     <div class="card">
       <div class="card-title">체중 기록</div>
       <div class="field"><label for="w-date">날짜</label><input type="date" id="w-date" value="${ymd()}" max="${ymd()}"></div>
-      ${ctlRow('체중', stepper('wStep', fmt(S.form.wInput), 'kg', 'data-step="0.1"'))}
+      ${ctlRow('체중', stepper('wStep', fmt(S.form.wInput), 'kg', 'data-step="0.1"', 'inWeight'))}
       <button class="btn primary" data-act="saveWeight" style="margin-top:var(--sp-3)">체중 저장</button>
       <div class="chart-box" style="margin-top:var(--sp-4)"><canvas id="chart-weight"></canvas></div>
       ${S.weights.length ? `<details style="margin-top:var(--sp-3)"><summary class="small">체중 기록 목록 (${S.weights.length})</summary><ul class="list small">${[...S.weights].reverse().map(w => `<li><div class="item"><span>${w.date}</span><span class="side"><b style="color:var(--text)">${fmt(w.kg)}kg</b> <button class="btn small" data-act="delWeight" data-date="${w.date}">삭제</button></span></div></li>`).join('')}</ul></details>` : ''}
@@ -817,6 +986,7 @@ RENDER.records = () => {
       <ul class="list small">${s.rows.map(r => `<li>${rowHtml(r)}</li>`).join('')}</ul></details>`).join('')
       : '<div class="empty">아직 운동 기록이 없어요.<br>홈에서 운동을 시작해 보세요.</div>'}`;
   drawWeightChart('chart-weight', false);
+  drawBodyChart();
 };
 
 async function saveWeight() {
@@ -932,11 +1102,12 @@ function renderDict() {
   $('#dict-body').innerHTML = groups.map(([g, gname]) => `<h3>${gname}</h3>` + EXERCISES.filter(e => e.group === g).map(ex => `
     <details class="card tight" style="background:var(--surface-2)"><summary><span>${ex.name} <span class="small muted">· ${EQUIP_NAME[ex.equip]}</span></span></summary>
       ${FIG.pair(ex.id)}
+      ${MUSCLE.card(ex.id)}
       <p class="small"><a href="${youtubeLink(ex)}" target="_blank" rel="noopener">▶ 유튜브에서 자세 영상 보기</a></p>
       <p class="small bold" style="margin-bottom:0">추천 자세</p><ul class="small">${ex.tips.map(t => `<li>${t}</li>`).join('')}</ul>
       <p class="small bold" style="margin-bottom:0;color:var(--danger)">주의 자세</p><ul class="small">${ex.cautions.map(t => `<li>${t}</li>`).join('')}</ul>
       <div class="kv small"><span>대체 운동</span><span style="white-space:normal">${ex.alts.map(a => EX[a].name).join(', ')}</span>
-      ${ex.cardio ? '' : `<span>중량 증가 단위</span><span>${Logic.isWeighted(ex) ? Logic.increment(ex, rules()) + 'kg' + (ex.assist ? ' (보조 줄임)' : '') : '횟수만 올림'}</span>`}</div>
+      ${ex.cardio ? '' : `<span>중량 증가 단위</span><span>${!Logic.isWeighted(ex) ? '횟수만 올림' : ex.equip === 'dumbbell' ? `${rules().dumbbellHeavyFrom}kg까지 ${rules().incDumbbell}kg, 넘으면 ${rules().incDumbbellHeavy}kg` : Logic.increment(ex, rules()) + 'kg' + (ex.assist ? ' (보조 줄임)' : '')}</span>`}</div>
       <p class="small bold" style="margin-bottom:0">MET (칼로리 계산)</p><ul class="small" style="margin-bottom:0">${metText(ex)}</ul>
     </details>`).join('')).join('');
 }
@@ -984,6 +1155,23 @@ const ACT = {
   saveSetup, cancelSetup: () => { S.editMode = false; go('settings'); },
   editProfile: () => { S.editMode = true; go('setup'); },
   startWorkout,
+  alertOk: () => stopAlert(),
+  nextW: el => { const it = curItem(); const r = computeResult(it); it.override = { weight: Logic.weightStep(EX[it.exId], r.weight, +el.dataset.d, rules()), reps: r.reps }; saveDraft(); rerender(); },
+  nextR: el => { const it = curItem(); const r = computeResult(it); it.override = { weight: r.weight, reps: Math.max(1, r.reps + (+el.dataset.d) * (+el.dataset.step)) }; saveDraft(); rerender(); },
+  nextReset: () => { curItem().override = null; saveDraft(); rerender(); },
+  rtEdit: el => { const id = el.dataset.id, ex = EX[id], n = S.next[id], pr = Logic.prescription(ex, S.profile.level, rules()); S.form.rtEdit = { id, w: n ? n.weight : ex.start, r: n ? n.reps : pr.lo }; S.form.rtOpen = el.dataset.day; rerender(); },
+  rtCancel: () => { S.form.rtEdit = null; rerender(); },
+  rtW: el => { const e = S.form.rtEdit; e.w = Logic.weightStep(EX[e.id], e.w, +el.dataset.d, rules()); rerender(); },
+  rtR: el => { const e = S.form.rtEdit; e.r = Math.max(1, e.r + (+el.dataset.d) * (+el.dataset.step)); rerender(); },
+  rtSave: async () => {
+    const e = S.form.rtEdit, prev = S.next[e.id];
+    await DB.put('next', { key: e.id, weight: Logic.isWeighted(EX[e.id]) ? e.w : 0, reps: e.r, hardStreak: prev ? prev.hardStreak || 0 : 0, manual: true, updated: new Date().toISOString() });
+    S.form.rtEdit = null; await loadAll(); toast(`${EX[e.id].name} 다음 목표를 저장했어요`); rerender();
+  },
+  bodyOpen: () => { S.form.bodyOpen = !S.form.bodyOpen; rerender(); },
+  bodySave: () => saveBody(),
+  bodyDel: async el => { if (!confirm(`${el.dataset.date} 인바디 기록을 지울까요?`)) return; await DB.del('body', el.dataset.date); await loadAll(); await syncBmr(); rerender(); },
+  bodyMetric: el => { S.form.bodyMetric = el.dataset.val; rerender(); },
   resume: () => go(S.workout.phase === 'cardio' ? 'cardio' : S.workout.phase === 'done' ? 'summary' : 'workout'),
   discardDraft: () => { if (confirm('진행 중인 운동을 취소할까요? 기록은 저장되지 않아요.')) { S.workout = null; saveDraft(); rerender(); } },
   revert: el => revertSub(el.dataset.orig),
@@ -1007,8 +1195,7 @@ const ACT = {
   },
   restAdj: el => { if (S.rest) { S.rest.end += (+el.dataset.d) * 1000; S.rest.total = Math.max(S.rest.total, (S.rest.end - Date.now()) / 1000); if (S.rest.end < Date.now()) endRest(false); else updateRestRing(); } },
   restSkip: () => endRest(false),
-  rate: el => { curItem().rating = el.dataset.val; saveDraft(); rerender(); },
-  foundW: el => { const it = curItem(); it.found = Math.max(0, Math.round((it.found + (+el.dataset.d) * (+el.dataset.step)) * 10) / 10); saveDraft(); rerender(); },
+  rate: el => { const it = curItem(); it.rating = el.dataset.val; it.override = null; saveDraft(); rerender(); },
   toggleDrop: () => { const it = curItem(); it.applyDrop = !it.applyDrop; saveDraft(); rerender(); },
   evalNext,
   cardioSkip: () => { S.workout.cardio.skipped = true; S.workout.phase = 'done'; saveDraft(); go('summary'); },
@@ -1026,7 +1213,7 @@ const ACT = {
   cardioRate: el => { S.workout.cardio.rating = el.dataset.val; saveDraft(); rerender(); },
   toSummary: () => { S.workout.phase = 'done'; saveDraft(); go('summary'); },
   saveSession,
-  discardSession: () => { if (confirm('이번 운동을 저장하지 않고 나갈까요?')) { S.workout = null; saveDraft(); go('home'); } },
+  discardSession: () => { if (confirm('이번 운동을 저장하지 않고 나갈까요?')) { S.workout = null; saveDraft(); keepAwake(false); go('home'); } },
   wStep: el => { S.form.wInput = Math.max(20, Math.round((S.form.wInput + (+el.dataset.d) * 0.1) * 10) / 10); rerender(); },
   saveWeight,
   delWeight: async el => { if (!confirm(`${el.dataset.date} 체중 기록을 지울까요?`)) return; await DB.del('weight', el.dataset.date); await loadAll(); rerender(); },
@@ -1064,11 +1251,34 @@ document.addEventListener('click', e => {
   if (fn) fn(el, e);
 });
 
+// 숫자 직접 입력칸
+const INPUT = {
+  inSetW: (el, v) => setSetValue('w', +el.dataset.i, v),
+  inSetR: (el, v) => setSetValue('r', +el.dataset.i, v),
+  inNextW: (el, v) => { const it = curItem(); const r = computeResult(it); it.override = { weight: Math.max(0, Math.round(v * 10) / 10), reps: r.reps }; saveDraft(); rerender(); },
+  inNextR: (el, v) => { const it = curItem(); const r = computeResult(it); it.override = { weight: r.weight, reps: Math.max(1, Math.round(v)) }; saveDraft(); rerender(); },
+  inRtW: (el, v) => { S.form.rtEdit.w = Math.max(0, Math.round(v * 10) / 10); rerender(); },
+  inRtR: (el, v) => { S.form.rtEdit.r = Math.max(1, Math.round(v)); rerender(); },
+  inCSet: (el, v) => { const c = S.workout.cardio; c.set[el.dataset.k] = Math.max(0, Math.round(v * 10) / 10); autoMinutes(); saveDraft(); rerender(); },
+  inCMin: (el, v) => { const c = S.workout.cardio; c.minutes = Math.max(1, Math.round(v)); c.manualMin = true; saveDraft(); rerender(); },
+  inWeight: (el, v) => { S.form.wInput = Math.max(20, Math.round(v * 10) / 10); rerender(); },
+};
+document.addEventListener('change', e => {
+  const el = e.target.closest('[data-input]');
+  if (!el) return;
+  const v = num(el.value);
+  if (v == null) { rerender(); return; }
+  INPUT[el.dataset.input](el, v);
+});
+document.addEventListener('focusin', e => { if (e.target.classList && e.target.classList.contains('val-input')) e.target.select(); });
+
 // 타이머 화면 갱신 (0.25초마다)
 setInterval(() => {
   if (S.rest) {
     updateRestRing();
-    if (S.rest.end - Date.now() <= 0) endRest(true);
+    const left = S.rest.end - Date.now();
+    if (!S.rest.warned && left <= 10000) { S.rest.warned = true; vibrate(200); beep(1); }   // 10초 전 예고
+    if (left <= 0) endRest(true);
   }
   const w = S.workout;
   if (!w) return;
@@ -1079,10 +1289,10 @@ setInterval(() => {
     if (c.intensity === 'high') {
       const ph = intervalPhase(el);
       const pe = $('#c-phase'); if (pe) pe.textContent = ph.name;
-      if (c.lastPhase && c.lastPhase !== ph.key) { vibrate(ph.fast ? [300, 100, 300] : [500]); beep(ph.fast ? 2 : 1); }
+      if (c.lastPhase && c.lastPhase !== ph.key) { vibrate(ph.fast ? [600, 150, 600, 150, 600] : [900]); loudBeep(ph.fast ? 1.5 : 1); if (document.hidden) notify(ph.name, '인터벌 구간이 바뀌었어요'); }
       c.lastPhase = ph.key;
     }
-    if (!c.goalAlerted && el >= c.minutes * 60) { c.goalAlerted = true; vibrate([400, 150, 400, 150, 400]); beep(3); toast('목표 시간을 채웠어요!'); saveDraft(); }
+    if (!c.goalAlerted && el >= c.minutes * 60) { c.goalAlerted = true; strongAlert('목표 시간 완료!', '유산소 끝 버튼을 눌러 평가해 주세요'); saveDraft(); }
   }
 }, 250);
 
@@ -1097,6 +1307,10 @@ setInterval(() => {
   applyTheme();
   if (!S.profile) { go('setup'); }
   else {
+    if (S.profile.rules && (S.profile.rulesVersion || 1) < 2) {
+      for (const [k, old] of Object.entries(OLD_RULE_DEFAULTS)) if (S.profile.rules[k] === old) delete S.profile.rules[k];
+    }
+    if ((S.profile.rulesVersion || 1) < 2) { S.profile.rulesVersion = 2; await DB.put('profile', S.profile); }
     if (!S.routine) { S.routine = { key: 'me', subs: {}, pointer: 0, sig: currentCycle().join(',') }; await DB.put('routine', S.routine); }
     // 분할 구성이 바뀌었으면(앱 업데이트 등) 첫 차례부터
     const sig = currentCycle().join(',');

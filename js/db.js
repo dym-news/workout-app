@@ -1,8 +1,8 @@
 /* 휴대폰 안 저장소(IndexedDB) — 설계서 7장의 6개 칸 */
 const DB = (() => {
   const NAME = 'workout-app';
-  const VERSION = 1;
-  // 칸 이름: 내 정보, 내 루틴, 근력 기록, 유산소 기록, 체중 기록, 다음 추천값
+  const VERSION = 2; // 2: 인바디 기록 칸 추가
+  // 칸 이름: 내 정보, 내 루틴, 근력 기록, 유산소 기록, 체중 기록, 다음 추천값, 인바디
   const STORES = {
     profile: { keyPath: 'key' },
     routine: { keyPath: 'key' },
@@ -10,6 +10,7 @@ const DB = (() => {
     cardio: { keyPath: 'id', autoIncrement: true },
     weight: { keyPath: 'date' },
     next: { keyPath: 'key' },
+    body: { keyPath: 'date' },   // 인바디 기록
   };
   let dbp = null;
 
