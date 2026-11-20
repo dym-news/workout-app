@@ -132,6 +132,7 @@ function applyTheme() {
 const currentCycle = () => Logic.cycle(S.profile.freq, S.profile.level);
 const nextDayKey = () => { const c = currentCycle(); return c[S.routine.pointer % c.length]; };
 const subs = () => S.routine.subs || {};
+const adds = () => S.routine.adds || {};   // 코스에 직접 추가한 운동
 const sinceMonday = r => new Date(r.date).getTime() >= mondayStart();
 function sessionsThisWeek() { const ids = new Set(); [...S.strength, ...S.cardio].filter(sinceMonday).forEach(r => ids.add(r.sessionId)); return ids.size; }
 const intervalsThisWeek = () => S.cardio.filter(r => sinceMonday(r) && r.intensity === 'high').length;
@@ -143,7 +144,7 @@ function cardioSettings(exId, intensity) {
   return saved ? Object.assign({}, saved.set) : Logic.cardioDefaults(EX[exId], intensity);
 }
 function planToday() {
-  return Logic.sessionPlan({ profile: S.profile, dayKey: nextDayKey(), subs: subs(), next: S.next, intervalsThisWeek: intervalsThisWeek(), cardioSettings });
+  return Logic.sessionPlan({ profile: S.profile, dayKey: nextDayKey(), subs: subs(), adds: adds(), next: S.next, intervalsThisWeek: intervalsThisWeek(), cardioSettings });
 }
 
 // 같은 부위 48시간 휴식 확인
@@ -304,6 +305,7 @@ RENDER.home = () => {
   const c = t.cardio;
   const sb = subs();
   const isSub = id => Object.values(sb).includes(id);
+  const isAdd = id => (adds()[t.dayKey] || []).includes(id);
   const weekTarget = g.sessionTarget ? g.sessionTarget * p.freq : null;
   const wn = weekNet();
 
@@ -317,7 +319,7 @@ RENDER.home = () => {
       <div class="row between"><span class="tag primary">다음 차례</span><span class="small muted">예상 약 ${t.totalMin}분</span></div>
       <div class="num" style="margin:var(--sp-3) 0 2px">${d.name}</div>
       <div class="small muted">${d.parts}</div>
-      <ul class="list numbered small" style="margin-top:var(--sp-4)">${t.items.map(it => `<li><div class="item"><span>${EX[it.id].name} ${isSub(it.id) ? '<span class="tag">대체</span>' : ''}</span><span class="side">${it.sets}세트</span></div></li>`).join('')}</ul>
+      <ul class="list numbered small" style="margin-top:var(--sp-4)">${t.items.map(it => `<li><div class="item"><span>${EX[it.id].name} ${isSub(it.id) ? '<span class="tag">대체</span>' : ''}${isAdd(it.id) ? '<span class="tag primary">추가</span>' : ''}</span><span class="side">${it.sets}세트</span></div></li>`).join('')}</ul>
       ${t.trims.length ? `<div class="notice warn slim">시간에 맞춰 줄였어요: ${t.trims.join(', ')}</div>` : ''}
       <div class="notice slim">준비운동 ${t.warmMin}분 → 근력 약 ${t.strengthMin}분 → ${c.skip ? '유산소는 시간이 부족해 다음 날로' : `유산소 ${Logic.CARDIO_INT[c.intensity].name} ${c.minutes}분 (${EX[c.exId].name})`}</div>
       ${restNotice(t.day)}
@@ -361,19 +363,22 @@ RENDER.routine = () => {
   const origOf = id => Object.keys(sb).find(k => sb[k] === id);
   const dayCard = (key, i) => {
     const d = Logic.DAYS[key];
-    const ids = Logic.dayExercises(key, p.level, sb);
+    const ids = Logic.dayExercises(key, p.level, sb, adds());
+    const added = adds()[key] || [];
     const status = i < done ? '<span class="tag success">완료</span>' : (i === done ? '<span class="tag primary">다음</span>' : '');
     return `<details class="card" ${i === done || S.form.rtOpen === key ? 'open' : ''}>
       <summary><span class="row" style="gap:var(--sp-2)"><span class="muted">${i + 1}</span> ${d.name} ${status}</span></summary>
       <p class="small muted" style="margin-top:0">${d.parts}</p>
       <ul class="list">${ids.map(id => {
         const ex = EX[id], pr = Logic.prescription(ex, p.level, R), o = origOf(id);
-        return `<li><div class="item"><span class="title">${ex.name}</span><span class="side">${pr.sets}세트<br>${pr.lo}~${pr.hi}${pr.unit}</span>
+        return `<li><div class="item"><span class="title">${ex.name} ${added.includes(id) ? '<span class="tag primary">추가</span>' : ''}</span><span class="side">${pr.sets}세트<br>${pr.lo}~${pr.hi}${pr.unit}</span>
           <span class="sub">휴식 ${pr.rest}초 · ${EQUIP_NAME[ex.equip]}</span>
           <div class="extra">${nextTargetRow(id, key, pr)}</div>
+          ${added.includes(id) ? `<div class="extra"><button class="btn small" data-act="addRemove" data-day="${key}" data-id="${id}">코스에서 빼기</button></div>` : ''}
           ${o ? `<div class="extra"><div class="small" style="color:var(--warning)">대체한 운동 · 원래: ${EX[o].name}</div>
             <button class="btn small" style="margin-top:var(--sp-2)" data-act="revert" data-orig="${o}">원래 운동으로 되돌리기</button></div>` : ''}</div></li>`;
-      }).join('')}</ul></details>`;
+      }).join('')}</ul>
+      ${addPicker(key, ids)}</details>`;
   };
   $('#scr-routine').innerHTML = `
     <div class="eyebrow">주 ${p.freq}회 · ${LEVELS[p.level]}</div>
@@ -485,6 +490,119 @@ function drawBodyChart() {
     options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } },
       scales: { x: { ticks: { color: text, maxTicksLimit: 6 }, grid: { color: line } }, y: { ticks: { color: text, maxTicksLimit: 6 }, grid: { color: line } } } },
   });
+}
+
+// 코스에 운동 추가: 그날 부위에 맞는 운동을 먼저 보여 줌
+function addPicker(dayKey, ids) {
+  if (S.form.addFor !== dayKey) return `<button class="btn" data-act="addOpen" data-day="${dayKey}" style="margin-top:var(--sp-3)">＋ 운동 추가</button>`;
+  const groups = new Set(Logic.DAYS[dayKey].list.map(id => EX[id].group));
+  const cands = EXERCISES.filter(e => !e.cardio && !ids.includes(e.id));
+  const fit = cands.filter(e => groups.has(e.group)), other = cands.filter(e => !groups.has(e.group));
+  const btn = e => `<button class="btn" style="margin-top:var(--sp-2);justify-content:space-between" data-act="addPick" data-day="${dayKey}" data-id="${e.id}"><span>${e.name}</span><span class="small muted">${e.part} · ${EQUIP_NAME[e.equip]}</span></button>`;
+  const n = (adds()[dayKey] || []).length;
+  return `<div class="card tight" style="background:var(--surface-2);margin-top:var(--sp-3)">
+    <div class="card-title">운동 추가 <button class="btn small" data-act="addClose">닫기</button></div>
+    ${n >= 2 ? '<div class="notice warn slim">이미 2개를 추가했어요. 더 넣으면 운동 시간이 길어지고, 시간이 모자라면 유산소가 줄어들 수 있어요.</div>' : '<p class="small muted" style="margin-top:0">한두 개 추가를 권해요. 추가한 운동은 다음부터 이 날마다 함께 나와요.</p>'}
+    <div class="small bold">이 날 부위에 맞는 운동</div>${fit.map(btn).join('') || '<p class="small muted">없어요</p>'}
+    <details style="margin-top:var(--sp-3)"><summary class="small">다른 부위 운동 (${other.length})</summary>${other.map(btn).join('')}</details>
+  </div>`;
+}
+async function saveAdds(fn) {
+  const a = Object.assign({}, adds()); fn(a);
+  S.routine.adds = a; await DB.put('routine', S.routine);
+}
+
+// =========================================================
+// 성장 그래프 (운동별 무게 변화 · 부위별 주간 세트 · 주간 시간·칼로리)
+// =========================================================
+const weekStartOf = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); };
+function growthCard() {
+  if (!S.strength.length && !S.cardio.length) return `<div class="card"><div class="card-title">성장 그래프</div><div class="empty small">운동을 기록하면 무게 변화와 부위별 운동량이 여기 그래프로 나와요.</div></div>`;
+  const tab = S.form.gTab || 'ex';
+  const tabs = [['ex', '운동별 무게'], ['region', '부위별 세트'], ['week', '주간 기록']];
+  let body = '';
+  if (tab === 'ex') {
+    const exIds = [...new Set(S.strength.map(r => r.exId))].filter(id => EX[id]);
+    if (!S.form.gEx || !exIds.includes(S.form.gEx)) S.form.gEx = exIds[0];
+    body = `<select id="g-ex" style="margin-top:var(--sp-3)">${exIds.map(id => `<option value="${id}" ${id === S.form.gEx ? 'selected' : ''}>${EX[id].name}</option>`).join('')}</select>
+      <div class="chart-box" style="margin-top:var(--sp-3)"><canvas id="chart-growth"></canvas></div>
+      <p class="xs muted" style="margin-bottom:0">막대: 그날 총 운동량(무게×횟수, 맨손은 총 횟수) · 선: 그날 가장 무거운 무게</p>`;
+  } else if (tab === 'region') {
+    const wk = S.form.gWeek || 0; // 0 이번 주, 1 지난주
+    const start = weekStartOf(Date.now()) - wk * 7 * 86400000, end = start + 7 * 86400000;
+    const recs = S.strength.filter(r => { const t = new Date(r.date).getTime(); return t >= start && t < end; });
+    const v = Logic.setsByRegion(recs.map(r => ({ exId: r.exId, sets: r.sets.length })));
+    const plan = Logic.weekVolume(S.profile.freq, S.profile.level, rules(), subs(), adds());
+    body = `<div class="choice" style="margin-top:var(--sp-3)"><button class="${wk === 0 ? 'on' : ''}" data-act="gWeek" data-val="0">이번 주</button><button class="${wk === 1 ? 'on' : ''}" data-act="gWeek" data-val="1">지난주</button></div>
+      ${Object.entries(v).map(([name, n]) => {
+        const lv = n >= 10 && n <= 20 ? 'good' : n > 20 ? 'caution' : n > 0 ? 'caution' : 'none';
+        return `<div style="margin-top:var(--sp-3)"><div class="row between small"><span class="bold">${name}</span><span><b class="lv-${lv}">${n}세트</b> <span class="muted">/ 계획 ${plan[name]}</span></span></div>
+          <div class="bar"><span style="width:${Math.min(100, n / 20 * 100)}%;background:var(--${lv === 'good' ? 'good' : lv === 'caution' ? 'caution' : 'line'})"></span></div></div>`;
+      }).join('')}
+      <p class="xs muted" style="margin-bottom:0">근육이 크려면 부위마다 주 10~20세트가 권장돼요(초보는 그보다 적어도 충분히 늘어요). 운동의 '주로 쓰는 근육' 기준으로 셌어요.</p>`;
+  } else {
+    body = `<div class="chart-box" style="margin-top:var(--sp-3)"><canvas id="chart-week"></canvas></div>
+      <p class="xs muted" style="margin-bottom:0">최근 8주 · 막대: 운동 시간(분) · 선: 순소모 칼로리</p>`;
+  }
+  return `<div class="card"><div class="card-title">성장 그래프</div>
+    <div class="choice wrap3">${tabs.map(([k, n]) => `<button class="${tab === k ? 'on' : ''}" data-act="gTab" data-val="${k}">${n}</button>`).join('')}</div>${body}</div>`;
+}
+function drawGrowth() {
+  if (!window.Chart) return;
+  const text = cssVar('--text-muted'), line = cssVar('--line'), primary = cssVar('--primary'), success = cssVar('--success');
+  ['growth', 'week'].forEach(k => { if (S.charts[k]) { S.charts[k].destroy(); delete S.charts[k]; } });
+  const axes = (y2) => Object.assign({ x: { ticks: { color: text, maxTicksLimit: 6 }, grid: { color: line } }, y: { ticks: { color: text }, grid: { color: line }, position: 'left' } },
+    y2 ? { y2: { ticks: { color: text }, grid: { display: false }, position: 'right' } } : {});
+  const cv = document.getElementById('chart-growth');
+  if (cv && S.form.gEx) {
+    const ex = EX[S.form.gEx], weighted = Logic.isWeighted(ex);
+    const rows = S.strength.filter(r => r.exId === S.form.gEx).sort((a, b) => a.date.localeCompare(b.date));
+    S.charts.growth = new Chart(cv, { data: { labels: rows.map(r => r.date.slice(5, 10).replace('-', '/')), datasets: [
+      { type: 'bar', label: weighted ? '총 운동량(kg)' : '총 횟수', data: rows.map(r => r.sets.reduce((a, x) => a + (weighted ? x.w * x.r : x.r), 0)), backgroundColor: success + '88', yAxisID: 'y' },
+      ...(weighted ? [{ type: 'line', label: '최고 무게(kg)', data: rows.map(r => Math.max(...r.sets.map(x => x.w))), borderColor: primary, backgroundColor: primary, tension: 0.3, pointRadius: 4, borderWidth: 3, yAxisID: 'y2' }] : []),
+    ] }, options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { labels: { color: text, boxWidth: 12 } } }, scales: axes(weighted) } });
+  }
+  const cw = document.getElementById('chart-week');
+  if (cw) {
+    const now = weekStartOf(Date.now()), weeks = Array.from({ length: 8 }, (_, i) => now - (7 - i) * 7 * 86400000);
+    const all = [...S.strength, ...S.cardio];
+    const agg = weeks.map(w => {
+      const rs = all.filter(r => { const t = new Date(r.date).getTime(); return t >= w && t < w + 7 * 86400000; });
+      const sess = {}; rs.forEach(r => { sess[r.sessionId] = r.sessionMin || 0; });
+      return { min: Object.values(sess).reduce((a, b) => a + b, 0), net: rs.reduce((a, r) => a + (r.net || 0), 0) };
+    });
+    S.charts.week = new Chart(cw, { data: { labels: weeks.map(w => { const d = new Date(w); return `${d.getMonth() + 1}/${d.getDate()}~`; }), datasets: [
+      { type: 'bar', label: '운동 시간(분)', data: agg.map(a => a.min), backgroundColor: primary + '99', yAxisID: 'y' },
+      { type: 'line', label: '순소모(kcal)', data: agg.map(a => Math.round(a.net)), borderColor: success, backgroundColor: success, tension: 0.3, pointRadius: 3, borderWidth: 3, yAxisID: 'y2' },
+    ] }, options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { labels: { color: text, boxWidth: 12 } } }, scales: axes(true) } });
+  }
+}
+document.addEventListener('change', e => { if (e.target.id === 'g-ex') { S.form.gEx = e.target.value; rerender(); } });
+
+// =========================================================
+// 지난 운동 기록 고치기·지우기
+// =========================================================
+function recordRow(r, rowHtml) {
+  const ex = EX[r.exId];
+  const store = r.warmup || (ex && ex.cardio) ? 'cardio' : 'strength';
+  const e = S.form.recEdit && S.form.recEdit.id === r.id && S.form.recEdit.store === store ? S.form.recEdit : null;
+  if (e && store === 'strength') {
+    const weighted = Logic.isWeighted(ex);
+    return `<div class="small bold">${ex.name} 고치기</div>
+      ${e.sets.map((x, i) => `<div class="ctl-row"><span class="label">${i + 1}세트</span><span class="row" style="gap:6px">
+        ${weighted ? `<input type="number" inputmode="decimal" step="any" value="${x.w}" data-rec="w" data-i="${i}" style="width:80px;min-height:40px;font-size:var(--fs-md);text-align:center"><span class="small muted">kg ×</span>` : ''}
+        <input type="number" inputmode="numeric" value="${x.r}" data-rec="r" data-i="${i}" style="width:64px;min-height:40px;font-size:var(--fs-md);text-align:center"><span class="small muted">${r.unit || '회'}</span>
+        <button class="btn small" data-act="recSetDel" data-i="${i}" aria-label="세트 지우기">✕</button></span></div>`).join('')}
+      <div class="btn-row" style="margin-top:var(--sp-2)"><button class="btn small" data-act="recSetAdd">＋ 세트</button><button class="btn small" data-act="recCancel">취소</button><button class="btn small primary" data-act="recSave">저장</button></div>`;
+  }
+  if (e && store === 'cardio') {
+    return `<div class="small bold">${r.warmup ? '준비운동' : ex.name} 시간 고치기</div>
+      <div class="ctl-row"><span class="label">시간</span><span class="row" style="gap:6px"><input type="number" inputmode="numeric" value="${e.minutes}" data-rec="min" style="width:72px;min-height:40px;text-align:center"><span class="small muted">분</span></span></div>
+      <div class="btn-row"><button class="btn small" data-act="recCancel">취소</button><button class="btn small primary" data-act="recSave">저장</button></div>`;
+  }
+  return `${rowHtml(r)}<div class="row" style="gap:6px;margin-top:6px;justify-content:flex-end">
+    <button class="btn small" data-act="recEdit" data-id="${r.id}" data-store="${store}">고치기</button>
+    <button class="btn small" data-act="recDel" data-id="${r.id}" data-store="${store}">지우기</button></div>`;
 }
 
 async function revertSub(orig) {
@@ -978,15 +1096,18 @@ RENDER.records = () => {
       <div class="chart-box" style="margin-top:var(--sp-4)"><canvas id="chart-weight"></canvas></div>
       ${S.weights.length ? `<details style="margin-top:var(--sp-3)"><summary class="small">체중 기록 목록 (${S.weights.length})</summary><ul class="list small">${[...S.weights].reverse().map(w => `<li><div class="item"><span>${w.date}</span><span class="side"><b style="color:var(--text)">${fmt(w.kg)}kg</b> <button class="btn small" data-act="delWeight" data-date="${w.date}">삭제</button></span></div></li>`).join('')}</ul></details>` : ''}
     </div>
+    ${growthCard()}
     <h2>운동 기록</h2>
-    ${list.length ? list.map(s => `<details class="card"><summary><span>${korDate(s.date)} <span class="small muted">${Logic.DAYS[s.dayKey] ? Logic.DAYS[s.dayKey].name : ''}</span></span></summary>
+    ${list.length ? list.map(s => `<details class="card" ${S.form.recOpen === s.id ? 'open' : ''}><summary><span>${korDate(s.date)} <span class="small muted">${Logic.DAYS[s.dayKey] ? Logic.DAYS[s.dayKey].name : ''}</span></span></summary>
       <div class="grid3" style="margin-bottom:var(--sp-3)"><div class="stat"><div class="label">시간</div><div class="value">${s.min}<small>분</small></div></div>
         <div class="stat"><div class="label">총 소모</div><div class="value">${kc(s.kcal)}<small>kcal</small></div></div>
         <div class="stat"><div class="label">순소모</div><div class="value">${kc(s.net)}<small>kcal</small></div></div></div>
-      <ul class="list small">${s.rows.map(r => `<li>${rowHtml(r)}</li>`).join('')}</ul></details>`).join('')
+      <ul class="list small">${s.rows.map(r => `<li>${recordRow(r, rowHtml)}</li>`).join('')}</ul>
+      <button class="btn danger small" data-act="recDelSession" data-sid="${s.id}" style="margin-top:var(--sp-3)">이 날 운동 기록 모두 지우기</button></details>`).join('')
       : '<div class="empty">아직 운동 기록이 없어요.<br>홈에서 운동을 시작해 보세요.</div>'}`;
   drawWeightChart('chart-weight', false);
   drawBodyChart();
+  drawGrowth();
 };
 
 async function saveWeight() {
@@ -1172,6 +1293,46 @@ const ACT = {
   bodySave: () => saveBody(),
   bodyDel: async el => { if (!confirm(`${el.dataset.date} 인바디 기록을 지울까요?`)) return; await DB.del('body', el.dataset.date); await loadAll(); await syncBmr(); rerender(); },
   bodyMetric: el => { S.form.bodyMetric = el.dataset.val; rerender(); },
+  addOpen: el => { S.form.addFor = el.dataset.day; S.form.rtOpen = el.dataset.day; rerender(); },
+  addClose: () => { S.form.addFor = null; rerender(); },
+  addPick: async el => { const d = el.dataset.day, id = el.dataset.id; await saveAdds(a => { a[d] = [...(a[d] || []), id]; }); S.form.addFor = null; S.form.rtOpen = d; toast(`${EX[id].name}을(를) ${Logic.DAYS[d].name}에 추가했어요`); rerender(); },
+  addRemove: async el => { const d = el.dataset.day, id = el.dataset.id; await saveAdds(a => { a[d] = (a[d] || []).filter(x => x !== id); }); S.form.rtOpen = d; toast(`${EX[id].name}을(를) 코스에서 뺐어요`); rerender(); },
+  gTab: el => { S.form.gTab = el.dataset.val; rerender(); },
+  gWeek: el => { S.form.gWeek = +el.dataset.val; rerender(); },
+  recEdit: el => {
+    const store = el.dataset.store, id = +el.dataset.id;
+    const r = (store === 'strength' ? S.strength : S.cardio).find(x => x.id === id);
+    S.form.recEdit = { id, store, sets: r.sets ? r.sets.map(x => Object.assign({}, x)) : null, minutes: r.minutes };
+    S.form.recOpen = r.sessionId; rerender();
+  },
+  recCancel: () => { S.form.recEdit = null; rerender(); },
+  recSetAdd: () => { const e = S.form.recEdit; const last = e.sets[e.sets.length - 1] || { w: 0, r: 10 }; e.sets.push(Object.assign({}, last)); rerender(); },
+  recSetDel: el => { const e = S.form.recEdit; if (e.sets.length <= 1) { toast('세트가 하나뿐이면 아래 지우기를 쓰세요'); return; } e.sets.splice(+el.dataset.i, 1); rerender(); },
+  recSave: async () => {
+    const e = S.form.recEdit;
+    const list = e.store === 'strength' ? S.strength : S.cardio;
+    const r = Object.assign({}, list.find(x => x.id === e.id));
+    if (e.store === 'strength') {
+      const old = r.sets.length;
+      r.sets = e.sets.map(x => ({ w: Math.max(0, num(x.w) || 0), r: Math.max(0, Math.round(num(x.r) || 0)) })).filter(x => x.r > 0);
+      if (old) { r.kcal = Math.round((r.kcal || 0) * r.sets.length / old); r.net = Math.round((r.net || 0) * r.sets.length / old); }
+    } else {
+      const m = Math.max(1, Math.round(num(e.minutes) || r.minutes)); const k = r.minutes ? m / r.minutes : 1;
+      r.kcal = Math.round((r.kcal || 0) * k); r.net = Math.round((r.net || 0) * k); r.minutes = m;
+    }
+    await DB.put(e.store, r); S.form.recEdit = null; await loadAll(); toast('기록을 고쳤어요'); rerender();
+  },
+  recDel: async el => {
+    if (!confirm('이 운동 기록을 지울까요? 되돌릴 수 없어요.')) return;
+    await DB.del(el.dataset.store, +el.dataset.id); await loadAll(); toast('기록을 지웠어요'); rerender();
+  },
+  recDelSession: async el => {
+    if (!confirm('이 날 운동 기록을 모두 지울까요? 되돌릴 수 없어요. (다음 차례 순서와 다음 목표는 그대로예요)')) return;
+    const sid = +el.dataset.sid;
+    for (const r of S.strength.filter(x => x.sessionId === sid)) await DB.del('strength', r.id);
+    for (const r of S.cardio.filter(x => x.sessionId === sid)) await DB.del('cardio', r.id);
+    await loadAll(); toast('이 날 기록을 지웠어요'); rerender();
+  },
   resume: () => go(S.workout.phase === 'cardio' ? 'cardio' : S.workout.phase === 'done' ? 'summary' : 'workout'),
   discardDraft: () => { if (confirm('진행 중인 운동을 취소할까요? 기록은 저장되지 않아요.')) { S.workout = null; saveDraft(); rerender(); } },
   revert: el => revertSub(el.dataset.orig),
@@ -1269,6 +1430,11 @@ document.addEventListener('change', e => {
   const v = num(el.value);
   if (v == null) { rerender(); return; }
   INPUT[el.dataset.input](el, v);
+});
+document.addEventListener('input', e => {
+  const el = e.target.closest('[data-rec]'); if (!el || !S.form.recEdit) return;
+  const k = el.dataset.rec;
+  if (k === 'min') S.form.recEdit.minutes = el.value; else S.form.recEdit.sets[+el.dataset.i][k] = el.value;
 });
 document.addEventListener('focusin', e => { if (e.target.classList && e.target.classList.contains('val-input')) e.target.select(); });
 

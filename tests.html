@@ -31,8 +31,12 @@
   <div class="card"><table id="t-step"></table></div>
   <h2>6. 인바디 판정</h2>
   <div class="card"><table id="t-body"></table></div>
+  <h2>7. 새 운동·코스 개편</h2>
+  <div class="card"><table id="t-new"></table></div>
 </div>
 <script src="js/exercises.js"></script>
+<script src="js/figures.js"></script>
+<script src="js/muscles.js"></script>
 <script src="js/logic.js"></script>
 <script>
   const R = Logic.rules({});
@@ -180,6 +184,27 @@
   const gB = Logic.goalCheck(Object.assign({}, { height: 175, weight: 80, target: 72, weeks: 12, sex: 'male', age: 40, freq: 4, minutes: 60 }, { bmrMeasured: 1800 }), R);
   h += `<tr><td>인바디 기초대사량 1800 입력</td><td>공식 대신 측정값 사용</td><td>1800</td><td>${gB.bmr}</td><td>${mark(gB.bmr === 1800)}</td></tr>`;
   document.getElementById('t-body').innerHTML = h;
+
+  // ---- 7. 2단계: 새 운동·코스 개편·운동 추가 ----
+  h = '<tr><th>항목</th><th>기대</th><th>계산 결과</th><th>결과</th></tr>';
+  const strength = EXERCISES.filter(e => !e.cardio);
+  const noFig = strength.filter(e => !FIG.has(e.id)).map(e => e.name), noMus = EXERCISES.filter(e => !MUSCLE.MAP[e.id]).map(e => e.name);
+  const badAlt = EXERCISES.filter(e => e.alts.some(a => !EX[a])).map(e => e.name);
+  h += `<tr><td>근력 운동 수</td><td>49개 (1차 31 + 추가 18)</td><td>${strength.length}개</td><td>${mark(strength.length === 49)}</td></tr>`;
+  h += `<tr><td>모든 운동에 그림·근육 그림·대체 운동</td><td>빠진 것 없음</td><td>${[...noFig, ...noMus, ...badAlt].join(', ') || '빠진 것 없음'}</td><td>${mark(!noFig.length && !noMus.length && !badAlt.length)}</td></tr>`;
+  [4, 5, 6].forEach(f => {
+    const v = Logic.weekVolume(f, 'intermediate', R);
+    const ok = ['가슴', '등', '허벅지 앞'].every(k => v[k] >= 10 && v[k] <= 24) && v['어깨'] >= 8 && v['엉덩이·허벅지 뒤'] >= 10;
+    h += `<tr><td>주 ${f}회 중급 주간 세트</td><td>가슴·등·허벅지 앞 10~24, 어깨 8+, 엉덩이·허벅지 뒤 10+</td><td>${Object.entries(v).map(([k, n]) => `${k} ${n}`).join(' · ')}</td><td>${mark(ok)}</td></tr>`;
+  });
+  const orderOk = Object.keys(Logic.DAYS).every(k => { const l = Logic.dayExercises(k, 'intermediate'); const firstSmall = l.findIndex(id => !EX[id].big); return firstSmall < 0 || l.slice(firstSmall).every(id => !EX[id].big); });
+  h += `<tr><td>운동 순서</td><td>모든 코스: 큰 운동 → 작은 운동 → 복부</td><td>${orderOk ? '지켜짐' : '어긋남'}</td><td>${mark(orderOk)}</td></tr>`;
+  const withAdd = Logic.dayExercises('LB', 'intermediate', {}, { LB: ['hip_abduction', 'side_plank'] });
+  const expAdd = ['rdl', 'hip_thrust', 'bulgarian', 'leg_curl', 'hip_abduction', 'cable_crunch', 'side_plank'];
+  h += `<tr><td>하체B에 힙 어브덕션·사이드 플랭크 추가</td><td>복부 운동 앞에 근력, 복부는 맨 뒤</td><td>${withAdd.map(id => EX[id].name).join(' → ')}</td><td>${mark(JSON.stringify(withAdd) === JSON.stringify(expAdd))}</td></tr>`;
+  const spAdd = Logic.sessionPlan({ profile: { height: 175, weight: 80, target: 80, weeks: 12, sex: 'male', age: 40, freq: 4, level: 'intermediate', minutes: 90 }, dayKey: 'LB', adds: { LB: ['hip_abduction'] } });
+  h += `<tr><td>추가한 운동이 오늘 계획에 들어감</td><td>힙 어브덕션 포함</td><td>${spAdd.items.map(i => EX[i.id].name).join(', ')}</td><td>${mark(spAdd.items.some(i => i.id === 'hip_abduction'))}</td></tr>`;
+  document.getElementById('t-new').innerHTML = h;
 
   document.getElementById('summary').innerHTML = `<div class="notice ${pass === total ? 'info' : 'danger'}"><b>${total}개 중 ${pass}개 통과</b></div>`;
 </script>

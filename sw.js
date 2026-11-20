@@ -1,6 +1,6 @@
 /* 인터넷 없이도 열리게 하는 파일 (서비스 워커)
    앱 파일을 고친 뒤에는 아래 VERSION 숫자를 하나 올리면 휴대폰에 새 버전이 반영됩니다. */
-const VERSION = 'v5';
+const VERSION = 'v6';
 const CACHE = 'workout-app-' + VERSION;
 const FILES = [
   './', './index.html', './css/design.css',

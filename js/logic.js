@@ -177,15 +177,17 @@ const Logic = (() => {
   // list: 운동 순서(큰 운동 → 작은 운동 → 복부) / skipBeginner: 초보는 빼는 운동(개수 하한)
   // 상체 구성 3가지 (부위 묶음)
   const UP = {
-    SB: { tag: '어깨·등', parts: '어깨 · 등', list: ['lat_pulldown', 'db_shoulder', 'barbell_row', 'seated_row', 'side_lateral', 'face_pull'], skipBeginner: ['barbell_row'] },
-    CB: { tag: '가슴·등', parts: '가슴 · 등 (다른 운동으로 두 번째 자극)', list: ['chest_press', 'assist_pullup', 'one_arm_row', 'pushup', 'rear_delt', 'hammer_curl'], skipBeginner: ['hammer_curl'] },
-    CA: { tag: '가슴·팔', parts: '가슴 · 삼두 · 이두', list: ['bench', 'incline_db', 'pec_deck', 'pushdown', 'barbell_curl', 'overhead_ext'], skipBeginner: ['pec_deck'] },
+    // 2단계 개편: 기구 운동 섞기(효과는 프리웨이트와 비슷하고 배우기 쉬움),
+    //  늘어난 자세에서 버티는 운동(덤벨 플라이·오버헤드 익스텐션·루마니안 데드리프트) 포함
+    SB: { tag: '어깨·등', parts: '어깨 · 등', list: ['lat_pulldown', 'db_shoulder', 'tbar_row', 'seated_row', 'side_lateral', 'face_pull'], skipBeginner: ['tbar_row'] },
+    CB: { tag: '가슴·등', parts: '가슴 · 등 · 팔 (다른 운동으로 두 번째 자극)', list: ['chest_press', 'assist_pullup', 'one_arm_row', 'assist_dip', 'rear_delt', 'hammer_curl'], skipBeginner: ['hammer_curl'] },
+    CA: { tag: '가슴·팔', parts: '가슴 · 삼두 · 이두', list: ['bench', 'incline_db', 'db_fly', 'overhead_ext', 'barbell_curl', 'pushdown'], skipBeginner: ['db_fly'] },
   };
   // 하체 구성 3가지
   const LO = {
     F: { tag: '앞쪽', parts: '허벅지 앞 · 엉덩이 · 종아리', list: ['squat', 'leg_press', 'lunge', 'leg_ext', 'standing_calf'], skipBeginner: ['lunge'] },
-    B: { tag: '뒤쪽', parts: '허벅지 뒤 · 엉덩이 · 복부', list: ['rdl', 'hip_thrust', 'bulgarian', 'leg_curl', 'plank'], skipBeginner: ['bulgarian'] },
-    C: { tag: '종합', parts: '허벅지 · 엉덩이 · 종아리 · 복부', list: ['leg_press', 'hip_thrust', 'leg_curl', 'seated_calf', 'hanging_leg'], skipBeginner: ['hanging_leg'] },
+    B: { tag: '뒤쪽', parts: '허벅지 뒤 · 엉덩이 · 복부', list: ['rdl', 'hip_thrust', 'bulgarian', 'leg_curl', 'cable_crunch'], skipBeginner: ['bulgarian'] },
+    C: { tag: '종합', parts: '허벅지 앞 · 허리·엉덩이 · 엉덩이 옆 · 종아리 · 복부', list: ['hack_squat', 'back_ext', 'hip_abduction', 'seated_calf', 'hanging_leg'], skipBeginner: ['hanging_leg'] },
   };
   const up = (label, k) => Object.assign({ name: `${label} (${UP[k].tag})`, area: ['upper'] }, UP[k]);
   const lo = (label, k) => Object.assign({ name: `${label} (${LO[k].tag})`, area: ['lower'] }, LO[k]);
@@ -197,10 +199,10 @@ const Logic = (() => {
     // 주 6회: 상체ㄱ·ㄴ·ㄷ / 하체ㄱ·ㄴ·ㄷ
     'Uㄱ': up('상체ㄱ', 'SB'), 'Uㄴ': up('상체ㄴ', 'CB'), 'Uㄷ': up('상체ㄷ', 'CA'), 'Lㄱ': lo('하체ㄱ', 'F'), 'Lㄴ': lo('하체ㄴ', 'B'), 'Lㄷ': lo('하체ㄷ', 'C'),
     FA: { name: '전신A', parts: '하체 · 가슴 · 등 · 어깨 · 복부', area: ['upper', 'lower'], list: ['squat', 'bench', 'lat_pulldown', 'db_shoulder', 'plank'], skipBeginner: [] },
-    FB: { name: '전신B', parts: '하체 · 가슴 · 등 · 어깨 · 복부', area: ['upper', 'lower'], list: ['rdl', 'incline_db', 'seated_row', 'side_lateral', 'crunch'], skipBeginner: [] },
-    U: { name: '상체', parts: '가슴 · 등 · 어깨 · 팔', area: ['upper'], list: ['bench', 'lat_pulldown', 'db_shoulder', 'seated_row', 'pushdown', 'barbell_curl'], skipBeginner: [] },
+    FB: { name: '전신B', parts: '하체 · 가슴 · 등 · 어깨 · 복부', area: ['upper', 'lower'], list: ['rdl', 'incline_db', 'seated_row', 'side_lateral', 'dead_bug'], skipBeginner: [] },
+    U: { name: '상체', parts: '가슴 · 등 · 어깨 · 팔', area: ['upper'], list: ['bench', 'lat_pulldown', 'db_shoulder', 'seated_row', 'overhead_ext', 'barbell_curl'], skipBeginner: [] },
     L: { name: '하체', parts: '허벅지 앞뒤 · 엉덩이 · 종아리', area: ['lower'], list: ['squat', 'rdl', 'leg_press', 'leg_curl', 'standing_calf'], skipBeginner: [] },
-    F: { name: '전신', parts: '하체 · 가슴 · 등 · 어깨 · 복부', area: ['upper', 'lower'], list: ['leg_press', 'incline_db', 'one_arm_row', 'side_lateral', 'hanging_leg'], skipBeginner: [] },
+    F: { name: '전신', parts: '하체 · 가슴 · 등 · 어깨 · 복부', area: ['upper', 'lower'], list: ['leg_press', 'incline_db', 'one_arm_row', 'side_lateral', 'cable_crunch'], skipBeginner: [] },
   };
 
   // 순환 순서. 요일 고정 없이 '다음 차례'로 돌아갑니다.
@@ -225,11 +227,39 @@ const Logic = (() => {
     const c = cycle(freq, level);
     return Array.from({ length: freq }, (_, i) => c[(start + i) % c.length]);
   }
-  function dayExercises(dayKey, level, subs = {}) {
+  // adds: 코스에 직접 추가한 운동 {요일키: [운동…]} — 복부 운동 앞에 끼워 넣음
+  function dayExercises(dayKey, level, subs = {}, adds = {}) {
     const d = DAYS[dayKey];
-    return d.list.filter(id => !(level === 'beginner' && d.skipBeginner.includes(id))).map(id => subs[id] || id);
+    const list = d.list.filter(id => !(level === 'beginner' && d.skipBeginner.includes(id))).map(id => subs[id] || id);
+    const extra = (adds[dayKey] || []).filter(id => EX[id] && !list.includes(id));
+    if (!extra.length) return list;
+    let at = list.length;
+    while (at > 0 && EX[list[at - 1]].group === 'core') at--;
+    const coreExtra = extra.filter(id => EX[id].group === 'core'), other = extra.filter(id => EX[id].group !== 'core');
+    return [...list.slice(0, at), ...other, ...list.slice(at), ...coreExtra];
   }
   function isLowerDay(dayKey) { const a = DAYS[dayKey].area; return a.includes('lower') && !a.includes('upper'); }
+
+  // 부위별 세트 수: 운동의 '주로 쓰는 근육'이 속한 부위에 세트를 더함 (권장 주 10~20세트)
+  const REGIONS = [
+    ['가슴', ['chest']], ['등', ['lats', 'mid_back']], ['어깨', ['front_delt', 'side_delt', 'rear_delt']], ['팔', ['biceps', 'triceps', 'forearm']],
+    ['허벅지 앞', ['quads', 'adductors']], ['엉덩이·허벅지 뒤', ['glutes', 'hams']], ['종아리', ['calves']], ['복부·허리', ['abs', 'obliques', 'lower_back']],
+  ];
+  function setsByRegion(entries) { // entries: [{ exId, sets }]
+    const out = Object.fromEntries(REGIONS.map(([n]) => [n, 0]));
+    if (typeof MUSCLE === 'undefined') return out;
+    entries.forEach(({ exId, sets }) => {
+      const m = MUSCLE.MAP[exId]; if (!m || (EX[exId] && EX[exId].cardio)) return;
+      REGIONS.forEach(([n, ms]) => { if (m.main.some(x => ms.includes(x))) out[n] += sets; });
+    });
+    return out;
+  }
+  // 한 주 계획 기준 부위별 세트 수
+  function weekVolume(freq, level, R, subs = {}, adds = {}) {
+    const entries = [];
+    weekPlan(freq, level, 0).forEach(k => dayExercises(k, level, subs, adds).forEach(id => entries.push({ exId: id, sets: prescription(EX[id], level, R).sets })));
+    return setsByRegion(entries);
+  }
 
   // =========================================================
   // 4-4. 세트·횟수·휴식
@@ -384,11 +414,11 @@ const Logic = (() => {
   //  ④ 감량 중 시간이 모자라면 유산소를 다음 날로 미루지 않고 작은 운동 세트부터 줄여 유산소 최소 시간을 확보
   //  ⑤ 그래도 못 채운 열량은 '식단으로' 표시
   // =========================================================
-  function sessionPlan({ profile, dayKey, subs = {}, next = {}, intervalsThisWeek = 0, cardioSettings }) {
+  function sessionPlan({ profile, dayKey, subs = {}, adds = {}, next = {}, intervalsThisWeek = 0, cardioSettings }) {
     const R = rules(profile), kg = profile.weight, level = profile.level;
     const g = goalCheck(profile, R);
     const warmMin = 7, warmNet = netKcal(WARMUP.met, kg, warmMin);
-    const items = dayExercises(dayKey, level, subs).map(id => {
+    const items = dayExercises(dayKey, level, subs, adds).map(id => {
       const ex = EX[id], presc = prescription(ex, level, R);
       return { id, sets: presc.sets, presc };
     });
@@ -565,7 +595,7 @@ const Logic = (() => {
   }
 
   return {
-    BODY_FIELDS, bodyAssess, rules, bmr, goalCheck, DAYS, cycle, splitNote, weekPlan, dayExercises, isLowerDay,
+    BODY_FIELDS, bodyAssess, REGIONS, setsByRegion, weekVolume, rules, bmr, goalCheck, DAYS, cycle, splitNote, weekPlan, dayExercises, isLowerDay,
     prescription, increment, weightStep, isWeighted, dropWeight, nextRec, calibrated, estMinutes,
     CARDIO_INT, cardioIntensity, cardioDefaults, cardioMinutes, cardioNext, hrRange, sessionPlan,
     MET_CODES, strengthMET, cardioMET, acsmTreadmill, acsmBike, WARMUP, kcal, netKcal,

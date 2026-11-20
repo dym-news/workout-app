@@ -31,6 +31,41 @@ const FIG = (() => {
       <text class="fig-label" x="50" y="86" text-anchor="middle">위에서 본 모습</text>`;
   }
 
+  // 위에서 본 덤벨 플라이: 벤치에 누워 팔을 옆으로 벌렸다 모음
+  function topFly(open) {
+    const L = open ? '36,34 22,30 9,35' : '36,34 42,38 47,41';
+    const Rr = open ? '64,34 78,30 91,35' : '64,34 58,38 53,41';
+    const hl = open ? [9, 35] : [46, 41], hr = open ? [91, 35] : [54, 41];
+    const arrows = open ? '' :
+      '<polyline class="fig-arrow" points="40,48 24,52"/><polyline class="fig-arrow" points="28,49.2 24,52 27.7,54.8"/>' +
+      '<polyline class="fig-arrow" points="60,48 76,52"/><polyline class="fig-arrow" points="72,49.2 76,52 72.3,54.8"/>';
+    return `
+      <rect class="fig-pad" x="41" y="14" width="18" height="74" rx="3" style="fill:var(--figure-prop);opacity:.25;stroke:none"/>
+      <rect class="fig-head" x="34" y="30" width="32" height="40" rx="10"/>
+      <circle class="fig-headtop" cx="50" cy="22" r="7"/>
+      <polyline class="fig-body" points="${L}"/><polyline class="fig-body" points="${Rr}"/>
+      <rect class="fig-fill" x="${hl[0] - 2.5}" y="${hl[1] - 5}" width="5" height="10" rx="1.5"/>
+      <rect class="fig-fill" x="${hr[0] - 2.5}" y="${hr[1] - 5}" width="5" height="10" rx="1.5"/>
+      ${arrows}
+      <text class="fig-label" x="50" y="96" text-anchor="middle">위에서 본 모습 · 벤치에 누워서</text>`;
+  }
+  // 위에서 본 힙 어브덕션(벌리기)·어덕션(모으기): 앉아서 무릎 바깥/안쪽 패드
+  function topLegs(spread, padsInside, arrowDir) {
+    const kl = spread ? [28, 30] : [44, 30], kr = spread ? [72, 30] : [56, 30];
+    const pad = (k, side) => { const x = padsInside ? k[0] - side * 5 : k[0] + side * 5; return `<polyline class="fig-pad" points="${x},22 ${x},38" style="stroke-width:6;opacity:.8"/>`; };
+    const arr = (x1, x2) => { const d = Math.sign(x2 - x1); return `<polyline class="fig-arrow" points="${x1},46 ${x2},46"/><polyline class="fig-arrow" points="${x2 - d * 4},43 ${x2},46 ${x2 - d * 4},49"/>`; };
+    const arrows = arrowDir === 'out' ? arr(40, 28) + arr(60, 72) : arrowDir === 'in' ? arr(30, 42) + arr(70, 58) : '';
+    return `
+      <rect x="30" y="56" width="40" height="30" rx="6" style="fill:var(--figure-prop);opacity:.2"/>
+      <polyline class="fig-body" style="stroke-width:7" points="45,70 ${kl[0]},${kl[1]}"/><polyline class="fig-body" style="stroke-width:7" points="55,70 ${kr[0]},${kr[1]}"/>
+      <circle class="fig-head" cx="${kl[0]}" cy="${kl[1]}" r="4.5"/><circle class="fig-head" cx="${kr[0]}" cy="${kr[1]}" r="4.5"/>
+      ${pad(kl, -1)}${pad(kr, 1)}
+      <rect class="fig-head" x="32" y="66" width="36" height="13" rx="6.5"/>
+      <circle class="fig-headtop" cx="50" cy="73" r="6"/>
+      ${arrows}
+      <text class="fig-label" x="50" y="96" text-anchor="middle">위에서 본 모습 · 앉아서</text>`;
+  }
+
   const POSES = {
     // ---------- 가슴 ----------
     bench: [
@@ -169,6 +204,72 @@ const FIG = (() => {
       { hip: [50, 52], t: 180, l: [0, 0], a: [180, 180], noGround: true, props: [['line', [30, 5], [70, 5]], ['handle', 'w']] },
       { hip: [50, 52], t: 180, l: [90, 90], a: [180, 180], noGround: true, props: [['line', [30, 5], [70, 5]], ['handle', 'w']] },
     ],
+    // ---------- 2단계 추가 운동 ----------
+    cable_crossover: [
+      { hip: [50, 55], t: 180, l: [5, 0], l2: [-5, 0], a: [125, 115], a2: [-125, -115], front: true, zoom: 1.1, toe: [3, 0], toe2: [-3, 0],
+        props: [['line', [88, 6], [88, 93]], ['line', [12, 6], [12, 93]], ['cable', 'w', [88, 8]], ['cable', 'w2', [12, 8]], ['handle', 'w'], ['handle', 'w2'], ['arrow', [82, 34], [70, 46]], ['arrow', [18, 34], [30, 46]]] },
+      { hip: [50, 55], t: 180, l: [5, 0], l2: [-5, 0], a: [-20, -10], a2: [20, 10], front: true, zoom: 1.1, toe: [3, 0], toe2: [-3, 0],
+        props: [['line', [88, 6], [88, 93]], ['line', [12, 6], [12, 93]], ['cable', 'w', [88, 8]], ['cable', 'w2', [12, 8]], ['handle', 'w'], ['handle', 'w2']] },
+    ],
+    db_fly: [{ raw: topFly(false) }, { raw: topFly(true) }],
+    machine_shoulder: [
+      { hip: [48, 70], t: 180, l: [90, 0], a: [10, 180], props: [...seatUp, ['pad', [42, 73], [42, 42]], ['line', [72, 8], [72, 92]], ['line', 'w', [72, 30]], ['handle', 'w']] },
+      { hip: [48, 70], t: 180, l: [90, 0], a: [175, 180], props: [...seatUp, ['pad', [42, 73], [42, 42]], ['line', [72, 8], [72, 92]], ['line', 'w', [72, 30]], ['handle', 'w']] },
+    ],
+    tbar_row: [
+      { foot: [50, 92], l: [15, -5], t: 120, a: [0, 0], props: [['line', ['w', 0, 2], [16, 92]], ['plate', ['w', -7, 4]], ['handle', 'w']] },
+      { foot: [50, 92], l: [15, -5], t: 120, a: [-70, 0], props: [['line', ['w', 0, 2], [16, 92]], ['plate', ['w', -7, 4]], ['handle', 'w']] },
+    ],
+    preacher_curl: [
+      { hip: [45, 70], t: 180, l: [90, 0], a: [60, 70], props: [['pad', [33, 73], [55, 73]], ['line', [44, 73], [44, 92]], ['pad', [44, 56], [63, 67]], ['line', [56, 64], [56, 92]], ['plate', 'w']] },
+      { hip: [45, 70], t: 180, l: [90, 0], a: [60, 175], props: [['pad', [33, 73], [55, 73]], ['line', [44, 73], [44, 92]], ['pad', [44, 56], [63, 67]], ['line', [56, 64], [56, 92]], ['plate', 'w']] },
+    ],
+    assist_dip: [
+      { hip: [50, 52], t: 180, l: [0, -90], a: [-5, 10], noGround: false, props: [['line', [40, 55], [64, 55]], ['line', [62, 55], [62, 93]], ['pad', [28, 74], [56, 74]], ['line', [56, 74], [72, 93]], ['handle', 'w'], ['arrow', [76, 36], [76, 52]]] },
+      { hip: [50, 62], t: 180, l: [0, -90], a: [-60, 55], props: [['line', [40, 55], [64, 55]], ['line', [62, 55], [62, 93]], ['pad', [28, 84], [56, 84]], ['line', [56, 84], [72, 93]], ['handle', 'w']] },
+    ],
+    smith_squat: [
+      S({ a: [-60, 150], props: [['line', [64, 3], [64, 93]], ['line', ['s', -2, -3], [64, 29]], ['plate', ['s', -2, -3]]] }),
+      { foot: [50, 92], l: [80, -20], t: 145, a: [-95, 115], props: [['line', [64, 3], [64, 93]], ['line', ['s', -2, -3], [64, 50]], ['plate', ['s', -2, -3]]] },
+    ],
+    hack_squat: [
+      { foot: [62, 90], l: [20, 20], t: 200, a: [-30, 170], toe: [6, -2], props: [['pad', ['p', -5, 2], ['s', -5, -2]], ['pad', [54, 94], [78, 87]], ['roller', ['s', 1, -4]]] },
+      { foot: [62, 90], l: [100, -30], t: 200, a: [-30, 170], toe: [6, -2], props: [['pad', ['p', -5, 2], ['s', -5, -2]], ['pad', [54, 94], [78, 87]], ['roller', ['s', 1, -4]]] },
+    ],
+    hip_abduction: [{ raw: topLegs(false, false, 'out') }, { raw: topLegs(true, false) }],
+    hip_adduction: [{ raw: topLegs(true, true, 'in') }, { raw: topLegs(false, true) }],
+    back_ext: [
+      { hip: [55, 58], t: 10, l: [-44, -44], a: [100, -80], noGround: true, props: [['pad', [53, 65], [63, 55]], ['pad', [22, 88], [32, 82]], ['line', [58, 62], [58, 93]], ['line', [27, 85], [27, 93]], ['line', [18, 93], [66, 93]]] },
+      { hip: [55, 58], t: 136, l: [-44, -44], a: [40, -100], noGround: true, props: [['pad', [53, 65], [63, 55]], ['pad', [22, 88], [32, 82]], ['line', [58, 62], [58, 93]], ['line', [27, 85], [27, 93]], ['line', [18, 93], [66, 93]]] },
+    ],
+    cable_crunch: [
+      { hip: [45, 73], t: 165, l: [0, -90], a: [160, -100], props: [['line', [74, 2], [74, 93]], ['cable', 'w', [74, 5]], ['handle', 'w'], ['arrow', [62, 30], [70, 48]]] },
+      { hip: [45, 73], t: 110, l: [0, -90], a: [105, -155], props: [['line', [74, 2], [74, 93]], ['cable', 'w', [74, 5]], ['handle', 'w']] },
+    ],
+    bw_squat: [
+      S({ a: [85, 85] }),
+      { foot: [50, 92], l: [80, -20], t: 145, a: [85, 85] },
+    ],
+    glute_bridge: [
+      { hip: [50, 88], t: -90, l: [140, 30], a: [90, 90], props: [['arrow', [50, 82], [50, 68]]] },
+      { hip: [48, 76], t: -59, l: [103, 15], a: [100, 90] },
+    ],
+    side_plank: [
+      { hip: [50, 82], t: 82, l: [-58, -90], a: [0, 90], a2: [120, 60], toe: [0, 0], zoom: 1.1 },
+      { foot: [12, 92], t: 102.5, l: [-77.5, -77.5], a: [0, 90], a2: [180, 180], toe: [0, 0], zoom: 1.1, props: [['cable', ['f', 0, -9], ['h', 2, -9]]] },
+    ],
+    dead_bug: [
+      { hip: [55, 86], t: -90, l: [180, 90], l2: [180, 90], a: [180, 180], a2: [180, 180] },
+      { hip: [55, 86], t: -90, l: [95, 90], l2: [180, 90], a: [-80, -80], a2: [180, 180] },
+    ],
+    bird_dog: [
+      { hip: [40, 70], t: 105, l: [0, -90], l2: [0, -90], a: [0, 0], a2: [0, 0] },
+      { hip: [40, 70], t: 105, l: [0, -90], l2: [-88, -88], a: [95, 95], a2: [0, 0] },
+    ],
+    mountain_climber: [
+      { foot: [12, 92], l: [-65.4, -65.4], l2: [-65.4, -65.4], t: 114.6, a: [0, 0], toe: [0, 0], toe2: [0, 0], props: [['arrow', [26, 70], [46, 64]]] },
+      { hip: [46.5, 76.2], l: [95, -30], l2: [-65.4, -65.4], t: 114.6, a: [0, 0], toe: [0, 0], toe2: [0, 0] },
+    ],
     // ---------- 유산소 ----------
     treadmill: [
       { hip: [45, 50], t: 175, l: [20, 0], l2: [-20, -10], a: [30, 80], a2: [-25, -10], props: [['pad', [10, 90], [86, 82]], ['line', [84, 82], [80, 42]], ['line', [80, 42], [70, 44]]] },
@@ -196,6 +297,13 @@ const FIG = (() => {
   const CAPS = {
     plank: ['① 무릎 대고 자리 잡기', '② 무릎 펴고 일직선 버티기'],
     rear_delt: ['시작: 팔을 앞으로 모음', '끝: 양옆으로 크게 벌림'],
+    db_fly: ['시작: 가슴 위로 모음', '끝: 양옆으로 벌려 내림'],
+    hip_abduction: ['시작: 무릎 모은 자세', '끝: 바깥으로 벌림'],
+    hip_adduction: ['시작: 다리 벌린 자세', '끝: 안쪽으로 모음'],
+    side_plank: ['① 무릎 대고 옆으로 버티기', '② 다리 펴고 일직선'],
+    dead_bug: ['시작: 팔·무릎 들기', '끝: 반대 팔·다리 뻗기'],
+    bird_dog: ['시작: 네발 자세', '끝: 반대 팔·다리 뻗기'],
+    mountain_climber: ['시작: 푸시업 자세', '끝: 무릎을 가슴으로 (번갈아)'],
   };
 
   // ---------- 계산 ----------
