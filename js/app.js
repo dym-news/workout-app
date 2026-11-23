@@ -337,7 +337,7 @@ RENDER.home = () => {
     </div>
     <div class="card">
       <div class="card-title">이번 주 <span class="side">${done} / ${p.freq}회</span></div>
-      <div class="dots">${Array.from({ length: p.freq }, (_, i) => `<span class="${i < done ? 'on' : ''}"></span>`).join('')}</div>
+      ${weekStrip()}
       ${weekTarget ? `<div class="kv" style="margin-top:var(--sp-3)"><span>운동 순소모</span><span>${kc(wn)} / ${kc(weekTarget)} kcal</span></div>` : ''}
     </div>
     <div class="card">
@@ -515,6 +515,102 @@ async function saveAdds(fn) {
 // =========================================================
 // 성장 그래프 (운동별 무게 변화 · 부위별 주간 세트 · 주간 시간·칼로리)
 // =========================================================
+// =========================================================
+// 달력: 운동한 날 표시 (상체 파랑 · 하체 초록 · 전신 보라 · ⚖ 체중/인바디)
+// =========================================================
+const dayKeyOf = iso => ymd(new Date(iso));
+// 날짜별 운동 묶음 { 'YYYY-MM-DD': [{ sessionId, dayKey }] }
+function sessionsByDate() {
+  const map = {};
+  const seen = new Set();
+  [...S.strength, ...S.cardio].forEach(r => {
+    if (seen.has(r.sessionId)) return; seen.add(r.sessionId);
+    (map[dayKeyOf(r.date)] = map[dayKeyOf(r.date)] || []).push({ sessionId: r.sessionId, dayKey: r.dayKey });
+  });
+  return map;
+}
+function areaClass(dayKey) {
+  const d = Logic.DAYS[dayKey]; if (!d) return 'c-full';
+  const up = d.area.includes('upper'), lo = d.area.includes('lower');
+  return up && lo ? 'c-full' : up ? 'c-upper' : 'c-lower';
+}
+// 주 목표 연속 달성 주 수 (이번 주가 아직 안 채워졌으면 지난주부터 셈)
+function streakWeeks() {
+  const per = {};
+  const seen = new Set();
+  [...S.strength, ...S.cardio].forEach(r => { if (seen.has(r.sessionId)) return; seen.add(r.sessionId); const w = weekStartOf(new Date(r.date).getTime()); per[w] = (per[w] || 0) + 1; });
+  const goal = S.profile.freq;
+  let w = weekStartOf(Date.now());
+  if ((per[w] || 0) < goal) w -= 7 * 86400000;
+  let n = 0;
+  while ((per[w] || 0) >= goal) { n++; w -= 7 * 86400000; }
+  return n;
+}
+function calendarCard(sessionList, rowHtml) {
+  const now = new Date();
+  const cur = S.form.calMonth || `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+  S.form.calMonth = cur;
+  const [Y, M] = cur.split('-').map(Number);
+  const first = new Date(Y, M - 1, 1), days = new Date(Y, M, 0).getDate();
+  const lead = (first.getDay() + 6) % 7; // 월요일 시작
+  const byDate = sessionsByDate();
+  const weighed = new Set([...S.weights.map(w => w.date), ...(S.body || []).map(b => b.date)]);
+  const today = ymd();
+  // 이번 달 요약
+  const monthSessions = sessionList.filter(x => dayKeyOf(x.date).startsWith(cur));
+  const mMin = monthSessions.reduce((a, x) => a + (x.min || 0), 0), mKcal = monthSessions.reduce((a, x) => a + x.kcal, 0);
+  const daysTrained = new Set(monthSessions.map(x => dayKeyOf(x.date))).size;
+  const streak = streakWeeks();
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push('<span class="d empty"></span>');
+  for (let d = 1; d <= days; d++) {
+    const key = `${cur}-${pad2(d)}`;
+    const ss = byDate[key] || [];
+    const cls = ['d', key === today ? 'today' : '', key === S.form.calDay ? 'sel' : '', ss.length ? 'has' : '', key > today ? 'future' : ''].join(' ');
+    cells.push(`<button class="${cls}" data-act="calDay" data-val="${key}" aria-label="${M}월 ${d}일${ss.length ? ' 운동함' : ''}">
+      <span class="n">${d}</span><span class="marks">${ss.slice(0, 3).map(x => `<i class="dot ${areaClass(x.dayKey)}"></i>`).join('')}${weighed.has(key) ? '<i class="scale">⚖</i>' : ''}</span></button>`);
+  }
+  // 고른 날 기록
+  let detail = '';
+  const sel = S.form.calDay;
+  if (sel && sel.startsWith(cur)) {
+    const daySess = sessionList.filter(x => dayKeyOf(x.date) === sel);
+    const w = S.weights.find(x => x.date === sel), b = (S.body || []).find(x => x.date === sel);
+    const dd = new Date(sel + 'T00:00:00');
+    detail = `<div class="cal-detail">
+      <div class="card-title" style="margin-bottom:var(--sp-2)">${korDate(dd)} <button class="btn small" data-act="calDay" data-val="">닫기</button></div>
+      ${w || b ? `<p class="small" style="margin-top:0">⚖ ${w ? `체중 <b>${fmt(w.kg)}kg</b>` : ''}${b && b.fatPct != null ? ` · 체지방률 <b>${b.fatPct}%</b>` : ''}${b && b.smm != null ? ` · 골격근량 <b>${b.smm}kg</b>` : ''}</p>` : ''}
+      ${daySess.length ? daySess.map(x => `<div class="card tight" style="background:var(--surface);margin-bottom:var(--sp-2)">
+          <div class="row between small"><b>${Logic.DAYS[x.dayKey] ? Logic.DAYS[x.dayKey].name : '운동'}</b><span class="muted">${x.min}분 · 약 ${kc(x.kcal)}kcal</span></div>
+          <ul class="list small" style="margin-top:var(--sp-2)">${x.rows.map(r => `<li>${recordRow(r, rowHtml)}</li>`).join('')}</ul></div>`).join('')
+        : `<p class="small muted" style="margin:0">${sel > today ? '아직 오지 않은 날이에요.' : '이 날은 운동 기록이 없어요.'}</p>`}
+    </div>`;
+  }
+  return `<div class="card">
+    <div class="card-title"><button class="btn small" data-act="calMove" data-d="-1" aria-label="지난달">◀</button>
+      <span>${Y}년 ${M}월</span><button class="btn small" data-act="calMove" data-d="1" aria-label="다음 달">▶</button></div>
+    <div class="grid3" style="margin-bottom:var(--sp-3)">
+      <div class="stat"><div class="label">운동한 날</div><div class="value">${daysTrained}<small>일</small></div></div>
+      <div class="stat"><div class="label">운동 시간</div><div class="value">${Math.floor(mMin / 60) ? Math.floor(mMin / 60) + '<small>시간 </small>' : ''}${mMin % 60}<small>분</small></div></div>
+      <div class="stat"><div class="label">총 소모</div><div class="value">${kc(mKcal)}<small>kcal</small></div></div>
+    </div>
+    ${streak > 0 ? `<div class="notice info slim" style="margin-top:0">🔥 <b>${streak}주 연속</b> 주 ${S.profile.freq}회 목표를 달성했어요!</div>` : ''}
+    <div class="cal-head">${'월화수목금토일'.split('').map(x => `<span>${x}</span>`).join('')}</div>
+    <div class="cal">${cells.join('')}</div>
+    <div class="legend" style="margin-top:var(--sp-2)"><span><i class="dot c-upper"></i>상체</span><span><i class="dot c-lower"></i>하체</span><span><i class="dot c-full"></i>전신</span><span>⚖ 체중·인바디</span></div>
+    ${detail}
+  </div>`;
+}
+// 홈: 이번 주 월~일 칸
+function weekStrip() {
+  const start = weekStartOf(Date.now()), byDate = sessionsByDate(), today = ymd();
+  return `<div class="week-strip">${'월화수목금토일'.split('').map((name, i) => {
+    const key = ymd(new Date(start + i * 86400000)), ss = byDate[key] || [];
+    return `<div class="wd ${key === today ? 'today' : ''} ${ss.length ? 'has' : ''}"><span class="nm">${name}</span>
+      <span class="ck">${ss.length ? `<i class="dot ${areaClass(ss[0].dayKey)}"></i>` : ''}</span></div>`;
+  }).join('')}</div>`;
+}
+
 const weekStartOf = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); };
 function growthCard() {
   if (!S.strength.length && !S.cardio.length) return `<div class="card"><div class="card-title">성장 그래프</div><div class="empty small">운동을 기록하면 무게 변화와 부위별 운동량이 여기 그래프로 나와요.</div></div>`;
@@ -1087,6 +1183,7 @@ RENDER.records = () => {
   };
   $('#scr-records').innerHTML = `
     <div class="eyebrow">기록</div><h1>몸과 운동 기록</h1>
+    ${calendarCard(list, rowHtml)}
     ${bodyCard()}
     <div class="card">
       <div class="card-title">체중 기록</div>
@@ -1299,6 +1396,12 @@ const ACT = {
   addRemove: async el => { const d = el.dataset.day, id = el.dataset.id; await saveAdds(a => { a[d] = (a[d] || []).filter(x => x !== id); }); S.form.rtOpen = d; toast(`${EX[id].name}을(를) 코스에서 뺐어요`); rerender(); },
   gTab: el => { S.form.gTab = el.dataset.val; rerender(); },
   gWeek: el => { S.form.gWeek = +el.dataset.val; rerender(); },
+  calMove: el => {
+    const [y, m] = S.form.calMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + (+el.dataset.d), 1);
+    S.form.calMonth = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; S.form.calDay = null; rerender();
+  },
+  calDay: el => { S.form.calDay = el.dataset.val || null; rerender(); },
   recEdit: el => {
     const store = el.dataset.store, id = +el.dataset.id;
     const r = (store === 'strength' ? S.strength : S.cardio).find(x => x.id === id);
