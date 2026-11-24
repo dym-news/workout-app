@@ -81,22 +81,44 @@ function notify(title, body) {
   } catch (e) { /* 알림 불가 */ }
 }
 function askNotify() { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) { /* 무시 */ } }
-// 놓치지 않는 알림: 진동 3초 + 큰 소리 3초 + 깜빡이는 팝업(누를 때까지) + 8초마다 최대 3번 다시 알림
+// 놓치지 않는 알림: 진동 3초 + 큰 소리 3초 + 깜빡이는 팝업
+//  5초 간격으로 모두 3번 울리고, 3번째가 끝나면 팝업을 저절로 닫고 다음 세트 화면으로 돌아감
 function strongAlert(title, msg) {
   stopAlert();
   const el = $('#alert-pop');
-  el.innerHTML = `<h2>${title}</h2><p>${msg}</p><button class="btn big" data-act="alertOk">확인</button>`;
+  el.innerHTML = `<h2>${title}</h2><p>${msg}</p><button class="btn big" data-act="alertOk">확인</button><p class="small" style="opacity:.8">3번 울린 뒤 저절로 닫혀요</p>`;
   el.classList.add('active');
   const ring = () => { vibrate(RING); loudBeep(3); };
   ring();
   let count = 1;
-  S.alertTimer = setInterval(() => { if (++count > 4) return stopAlert(true); ring(); }, 8000);
+  S.alertTimer = setInterval(() => {
+    count++;
+    if (count <= 3) ring();
+    else stopAlert(); // 3번째 울림(약 3초)이 끝난 뒤 닫기
+  }, 5000);
   if (document.hidden) notify(title, msg);
 }
 function stopAlert(keepPopup) {
   if (S.alertTimer) { clearInterval(S.alertTimer); S.alertTimer = null; }
   vibrate(0);
   if (!keepPopup) $('#alert-pop').classList.remove('active');
+}
+// 상태표시줄(알림 창)에 휴식 남은 시간 표시 — 소리·진동 없이 5초마다 갱신
+function restNotify() {
+  try {
+    if (!S.rest || !('Notification' in window) || Notification.permission !== 'granted' || !navigator.serviceWorker) return;
+    const left = Math.max(0, (S.rest.end - Date.now()) / 1000);
+    const it = S.workout && S.workout.items && curItem();
+    const n = it ? it.sets.findIndex(s => !s.done) + 1 : 0;
+    S.rest.noted = Date.now();
+    navigator.serviceWorker.ready.then(reg => reg.showNotification(`휴식 중 · ${mmss(left)} 남음`, {
+      body: it && n ? `다음: ${EX[it.exId].name} ${n}세트 (${setLabel(EX[it.exId], it.sets[n - 1], it.presc.unit)})` : '다음 세트 준비',
+      tag: 'rest-timer', renotify: false, silent: true, requireInteraction: true, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png',
+    }));
+  } catch (e) { /* 알림 불가 */ }
+}
+function clearRestNotify() {
+  try { if (navigator.serviceWorker) navigator.serviceWorker.ready.then(reg => reg.getNotifications({ tag: 'rest-timer' }).then(list => list.forEach(x => x.close()))); } catch (e) { /* 무시 */ }
 }
 // 운동하는 동안 화면이 꺼지지 않게
 async function keepAwake(on) {
@@ -133,6 +155,7 @@ const currentCycle = () => Logic.cycle(S.profile.freq, S.profile.level);
 const nextDayKey = () => { const c = currentCycle(); return c[S.routine.pointer % c.length]; };
 const subs = () => S.routine.subs || {};
 const adds = () => S.routine.adds || {};   // 코스에 직접 추가한 운동
+const curWk = (offset = 0) => rules().rotateVariants ? Logic.weekIndex() + offset : null;   // 기구 변형용 주 번호
 const sinceMonday = r => new Date(r.date).getTime() >= mondayStart();
 function sessionsThisWeek() { const ids = new Set(); [...S.strength, ...S.cardio].filter(sinceMonday).forEach(r => ids.add(r.sessionId)); return ids.size; }
 const intervalsThisWeek = () => S.cardio.filter(r => sinceMonday(r) && r.intensity === 'high').length;
@@ -144,7 +167,7 @@ function cardioSettings(exId, intensity) {
   return saved ? Object.assign({}, saved.set) : Logic.cardioDefaults(EX[exId], intensity);
 }
 function planToday() {
-  return Logic.sessionPlan({ profile: S.profile, dayKey: nextDayKey(), subs: subs(), adds: adds(), next: S.next, intervalsThisWeek: intervalsThisWeek(), cardioSettings });
+  return Logic.sessionPlan({ profile: S.profile, dayKey: nextDayKey(), subs: subs(), adds: adds(), wk: curWk(), next: S.next, intervalsThisWeek: intervalsThisWeek(), cardioSettings });
 }
 
 // 같은 부위 48시간 휴식 확인
@@ -363,16 +386,19 @@ RENDER.routine = () => {
   const origOf = id => Object.keys(sb).find(k => sb[k] === id);
   const dayCard = (key, i) => {
     const d = Logic.DAYS[key];
-    const ids = Logic.dayExercises(key, p.level, sb, adds());
+    const ids = Logic.dayExercises(key, p.level, sb, adds(), curWk());
+    const baseIds = Logic.dayExercises(key, p.level, sb, adds());
+    const nextIds = Logic.dayExercises(key, p.level, sb, adds(), curWk(1));
     const added = adds()[key] || [];
     const status = i < done ? '<span class="tag success">완료</span>' : (i === done ? '<span class="tag primary">다음</span>' : '');
     return `<details class="card" ${i === done || S.form.rtOpen === key ? 'open' : ''}>
       <summary><span class="row" style="gap:var(--sp-2)"><span class="muted">${i + 1}</span> ${d.name} ${status}</span></summary>
       <p class="small muted" style="margin-top:0">${d.parts}</p>
       <ul class="list">${ids.map(id => {
-        const ex = EX[id], pr = Logic.prescription(ex, p.level, R), o = origOf(id);
+        const ex = EX[id], pr = Logic.prescription(ex, p.level, R), o = origOf(id), idx = ids.indexOf(id);
+        const nx = nextIds[idx] && nextIds[idx] !== id ? EX[nextIds[idx]].name : null;
         return `<li><div class="item"><span class="title">${ex.name} ${added.includes(id) ? '<span class="tag primary">추가</span>' : ''}</span><span class="side">${pr.sets}세트<br>${pr.lo}~${pr.hi}${pr.unit}</span>
-          <span class="sub">휴식 ${pr.rest}초 · ${EQUIP_NAME[ex.equip]}</span>
+          <span class="sub">휴식 ${pr.rest}초 · ${EQUIP_NAME[ex.equip]}${nx ? ` · <span style="color:var(--primary)">다음 주: ${nx}</span>` : ''}</span>
           <div class="extra">${nextTargetRow(id, key, pr)}</div>
           ${added.includes(id) ? `<div class="extra"><button class="btn small" data-act="addRemove" data-day="${key}" data-id="${id}">코스에서 빼기</button></div>` : ''}
           ${o ? `<div class="extra"><div class="small" style="color:var(--warning)">대체한 운동 · 원래: ${EX[o].name}</div>
@@ -387,6 +413,7 @@ RENDER.routine = () => {
       <div class="card-title">분할 순서 <span class="side">이번 주 ${done}회 완료</span></div>
       <div class="row wrap" style="gap:6px">${week.map((k, i) => `<span class="tag ${i < done ? 'success' : i === done ? 'primary' : ''}">${Logic.DAYS[k].name.split(' ')[0]}</span>${i < week.length - 1 ? '<span class="muted xs">→</span>' : ''}`).join('')}</div>
       <p class="small" style="margin-bottom:0">${Logic.splitNote(p.freq, p.level)}</p>
+      ${rules().rotateVariants ? '<p class="small" style="margin-bottom:0">🔄 레그 컬(누워서↔앉아서), 레그프레스(앉아서↔45도)처럼 <b>기구·방법을 주마다 번갈아</b> 추천해요. 스쿼트·벤치프레스 같은 큰 바벨 운동은 무게 변화를 보려고 그대로 둬요. (설정 → 추천 기준 수치에서 끌 수 있어요)</p>' : ''}
       <p class="xs muted" style="margin-bottom:0">요일을 고정하지 않고 '다음 차례'로 돌아가요. 하루 빠져도 순서가 꼬이지 않아요.${done >= p.freq ? ' 이번 주 목표를 채웠어요!' : ''}</p>
     </div>
     ${week.map(dayCard).join('')}`;
@@ -836,6 +863,7 @@ function startRest(sec) {
   S.rest = { end: Date.now() + sec * 1000, total: sec, warned: sec <= 12 };
   renderRest();
   $('#ovl-rest').classList.add('active');
+  restNotify();
 }
 function renderRest() {
   if (!S.rest) return;
@@ -850,7 +878,7 @@ function renderRest() {
     <div class="ring"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="44"/><circle class="prog" id="rest-ring" cx="50" cy="50" r="44" stroke-dasharray="276.5" stroke-dashoffset="0"/></svg><div class="timer" id="rest-timer">${mmss(left)}</div></div>
     <div class="btn-row"><button class="btn big" data-act="restAdj" data-d="-30">−30초</button><button class="btn big" data-act="restAdj" data-d="30">+30초</button></div>
     <button class="btn primary big" data-act="restSkip" style="margin-top:var(--sp-3)">건너뛰기</button>
-    <p class="xs muted center" style="margin-top:var(--sp-4)">10초 전에 짧게, 끝나면 <b>진동 3초 + 소리 + 화면 팝업</b>으로 알려 드려요.<br>다른 앱을 보고 있으면 휴대폰 알림으로도 알려요.</p>`;
+    <p class="xs muted center" style="margin-top:var(--sp-4)">10초 전에 짧게, 끝나면 <b>진동 3초 + 소리 + 화면 팝업</b>으로 알려 드려요.<br>휴대폰 상태표시줄에도 남은 시간이 보여요.</p>`;
   updateRestRing();
 }
 function updateRestRing() {
@@ -861,6 +889,7 @@ function updateRestRing() {
 }
 function endRest(alert) {
   S.rest = null;
+  clearRestNotify();
   $('#ovl-rest').classList.remove('active');
   if (alert) {
     const it = S.workout && S.workout.items && curItem();
@@ -875,7 +904,7 @@ async function substitute(toId) {
   const it = curItem();
   const sb = subs();
   const cur = it.exId;
-  const orig = Object.keys(sb).find(k => sb[k] === cur) || cur;
+  const orig = Object.keys(sb).find(k => sb[k] === cur) || Logic.baseInDay(w.dayKey, cur);
   if (toId === orig) delete sb[orig]; else sb[orig] = toId;
   S.routine.subs = sb;
   await DB.put('routine', S.routine);
@@ -1005,7 +1034,26 @@ function cardioSetText(ex, s, intensity) {
   if (ex.ctl === 'speed') return `시속 ${fmt(s.speed)}km · 경사 ${s.incline}%`;
   return intensity === 'high' ? `빠르게 ${s.level}단계${w} / 천천히 ${s.easyLevel}단계` : `${s.level}단계${w}`;
 }
-function cardioMinutesDone(c) { const m = cardioElapsed(c) / 60; return m >= 1 ? Math.round(m) : c.minutes; }
+function cardioMinutesDone(c) {
+  const m = c.res && num(c.res.min);
+  if (m) return m;
+  const e = cardioElapsed(c) / 60; return e >= 1 ? Math.round(e) : c.minutes;
+}
+// 입력한 결과로 평균 속도·칼로리 계산
+//  칼로리를 입력하면 기계 값을 쓰고(순소모 = 입력값 − 가만히 있을 때 쓰는 열량), 비워 두면 MET로 계산
+function cardioResult(c) {
+  const kg = S.profile.weight, ex = EX[c.exId], r = c.res || {};
+  const min = cardioMinutesDone(c), km = num(r.km), incline = ex.ctl === 'speed' ? (num(r.incline) ?? c.set.incline ?? 0) : null, kcalM = num(r.kcal);
+  const avg = km && min ? Math.round(km / (min / 60) * 10) / 10 : null;
+  const m = ex.ctl === 'speed' && avg ? Logic.acsmTreadmill(avg, incline || 0) : Logic.cardioMET(c.exId, c.intensity, c.set, kg);
+  const kcal = kcalM || Logic.kcal(m.met, kg, min);
+  const net = kcalM ? Math.max(0, kcalM - kg * min / 60) : Logic.netKcal(m.met, kg, min);
+  return { min, km, incline, avg, kcal, net, met: m.met, src: kcalM ? '기계 표시값' : `계산값 (MET ${m.met})` };
+}
+function cardioCalcText(c) {
+  const r = cardioResult(c);
+  return `${r.avg ? `평균 속도 <b>시속 ${fmt(r.avg)}km</b> · ` : ''}${r.min}분 · 칼로리 <b>약 ${kc(r.kcal)}kcal</b> <span class="muted">(${r.src})</span>`;
+}
 
 RENDER.cardio = () => {
   const w = S.workout;
@@ -1027,55 +1075,54 @@ RENDER.cardio = () => {
     return;
   }
 
-  if (c.finished) {
-    const cur = Object.assign({ minutes: c.minutes }, c.set);
-    const res = c.rating ? Logic.cardioNext(ex, c.intensity, cur, c.rating, g.direction === 'loss') : null;
-    $('#scr-cardio').innerHTML = `
-      <div class="eyebrow">${I.name} · ${cardioMinutesDone(c)}분</div>
-      <h1>${ex.name}<br>어땠나요?</h1>
-      <div class="choice col">${Object.keys(RATINGS).map(k => ratingBtn('cardioRate', k, c.rating, RATING_DESC_CARDIO)).join('')}</div>
-      ${res ? `<div class="card" style="margin-top:var(--sp-3)"><div class="eyebrow">다음 번 추천</div><p class="bold" style="margin:var(--sp-1) 0">${cardioSetText(ex, res.next, c.intensity)}${g.direction === 'loss' ? '' : ` · ${res.next.minutes}분`}</p><p class="small muted" style="margin:0">${res.note}${g.direction === 'loss' ? ' (시간은 그날 남은 목표 열량으로 정해요)' : ''}</p></div>` : ''}
-      ${actionBar(`<button class="btn primary big" data-act="toSummary" ${c.rating ? '' : 'disabled'}>운동 완료 요약 보기</button>`)}`;
-    return;
-  }
-
   const el = cardioElapsed(c);
   const running = !!c.runStart;
   const cm = Logic.cardioMET(c.exId, c.intensity, c.set, kg);
   const estNet = Logic.netKcal(cm.met, kg, c.minutes);
-  const hasWatts = c.exId === 'bike' || c.exId === 'rower';
-  const ctl = ex.ctl === 'speed'
-    ? ctlRow('속도', stepper('cSet', fmt(c.set.speed), 'km/h', 'data-k="speed" data-step="0.5"', 'inCSet')) + ctlRow('경사', stepper('cSet', c.set.incline, '%', 'data-k="incline" data-step="1"', 'inCSet'))
-    : ctlRow(c.intensity === 'high' ? '빠르게 단계' : '저항 단계', stepper('cSet', c.set.level, '단계', 'data-k="level" data-step="1"', 'inCSet'))
-      + (c.intensity === 'high' ? ctlRow('천천히 단계', stepper('cSet', c.set.easyLevel, '단계', 'data-k="easyLevel" data-step="1"', 'inCSet')) : '')
-      + (hasWatts ? ctlRow(`${c.intensity === 'high' ? '빠르게 ' : ''}와트(W)<br><span class="xs">기계에 나오면 입력</span>`, stepper('cSet', c.set.watts || 0, 'W', 'data-k="watts" data-step="10"', 'inCSet')) : '');
+  const isTm = ex.ctl === 'speed';
+  const r = c.res || (c.res = {});
+  const inp = (k, label, unit, ph, hint = '') => `<div class="field"><label for="cr-${k}">${label} <span class="muted">(${unit})</span></label>
+    <input id="cr-${k}" type="number" inputmode="decimal" step="any" data-cres="${k}" value="${r[k] ?? ''}" placeholder="${ph}">${hint ? `<div class="hint">${hint}</div>` : ''}</div>`;
   $('#scr-cardio').innerHTML = `
     <div class="row between"><span class="tag primary">유산소 · ${I.name}</span><button class="btn small" data-act="endEarly">운동 끝내기</button></div>
     <h1 style="margin-top:var(--sp-3)">${ex.name}</h1>
     <p class="small muted" style="margin-top:-8px">${c.reason}</p>
-    ${running || el > 0 ? '' : `<div class="choice wrap2" style="margin-bottom:var(--sp-3)">${I.allowed.map(id => `<button class="${id === c.exId ? 'on' : ''}" data-act="cardioEx" data-val="${id}">${EX[id].name}</button>`).join('')}</div>`}
-    <div class="grid2" style="margin-bottom:var(--sp-3)">
-      <div class="stat"><div class="label">목표 심박수</div><div class="value">${hr.hr[0]}~${hr.hr[1]}<small> 회/분</small></div></div>
-      <div class="stat"><div class="label">예상 순소모</div><div class="value">약 ${kc(estNet)}<small> kcal</small></div></div>
+    <div class="choice wrap2" style="margin-bottom:var(--sp-3)">${I.allowed.map(id => `<button class="${id === c.exId ? 'on' : ''}" data-act="cardioEx" data-val="${id}">${EX[id].name}</button>`).join('')}</div>
+    <div class="card">
+      <div class="card-title">오늘 추천 <span class="side">참고용</span></div>
+      <div class="kv">
+        <span>시간</span><span>${c.intensity === 'high' ? '20분 (인터벌)' : `약 ${c.minutes}분`}</span>
+        <span>설정</span><span>${cardioSetText(ex, c.set, c.intensity)}</span>
+        <span>목표 심박수</span><span>${hr.hr[0]}~${hr.hr[1]}회/분</span>
+        <span>예상 순소모</span><span>약 ${kc(estNet)}kcal</span>
+      </div>
+      <p class="xs muted" style="margin-bottom:0">느낌: ${I.feel} · 최대 심박수 약 ${hr.maxHR}회/분의 ${I.hr[0]}~${I.hr[1]}%${g.direction === 'loss' && c.needNet > 0 ? ` · 오늘 목표까지 남은 열량 약 ${kc(c.needNet)}kcal` : ''}</p>
     </div>
-    <p class="xs muted" style="margin-top:0">최대 심박수 약 ${hr.maxHR}회/분(220−나이)의 ${I.hr[0]}~${I.hr[1]}% · 느낌: ${I.feel}<br>강도 수치 MET ${cm.met} — ${cm.src}</p>
     ${FIG.pair(ex.id)}
     ${MUSCLE.card(ex.id)}
-    <div class="card" style="margin-top:var(--sp-3)">${ctl}
-      ${c.intensity === 'high' ? '<p class="xs muted" style="margin-bottom:0">2분 준비 → (30초 빠르게 + 90초 천천히) × 8회 → 2분 정리</p>'
-        : ctlRow('목표 시간', stepper('cMin', c.minutes, '분', 'data-step="5"', 'inCMin'))}
-    </div>
-    ${g.direction === 'loss' && c.intensity !== 'high' ? `<div class="notice info slim">오늘 목표까지 남은 열량 약 ${kc(c.needNet)}kcal → 이 설정이면 약 ${c.want}분이 필요해요.${c.limited ? ` 남은 시간이 ${c.fitMin}분이라 ${c.minutes}분으로 줄였어요.` : ''} 속도·경사·와트를 바꾸면 시간이 다시 계산돼요.</div>` : ''}
-    <div class="card center">
-      ${c.intensity === 'high' ? `<div id="c-phase" class="bold" style="font-size:var(--fs-xl)">${intervalPhase(el).name}</div>` : ''}
-      <div class="timer" id="c-timer">${mmss(el)}</div>
-      <p class="small muted" style="margin-top:-8px">목표 ${c.minutes}분</p>
-      <button class="btn ${running ? '' : 'primary'} big" data-act="cardioToggle">${running ? '일시정지' : (el > 0 ? '계속' : '타이머 시작')}</button>
-    </div>
-    <details class="card tight"><summary class="small">자세 안내</summary><ul class="small">${ex.tips.map(t => `<li>${t}</li>`).join('')}</ul>
+    <details class="card tight" style="margin-top:var(--sp-3)"><summary class="small">자세 안내</summary><ul class="small">${ex.tips.map(t => `<li>${t}</li>`).join('')}</ul>
       <p class="small bold" style="margin:0;color:var(--danger)">주의</p><ul class="small" style="margin-bottom:0">${ex.cautions.map(t => `<li>${t}</li>`).join('')}</ul></details>
-    <div class="notice danger slim">어지럽거나 가슴이 아프면 즉시 멈추세요. 타이머를 쓰지 않았다면 목표 시간으로 기록돼요.</div>
-    ${actionBar('<button class="btn success big" data-act="cardioEnd">유산소 끝</button>')}`;
+    ${c.intensity === 'high' ? `<div class="card center">
+      <div class="small muted">인터벌 타이머 · 2분 준비 → (30초 빠르게 + 90초 천천히) × 8회 → 2분 정리</div>
+      <div id="c-phase" class="bold" style="font-size:var(--fs-xl);margin-top:var(--sp-2)">${intervalPhase(el).name}</div>
+      <div class="timer" id="c-timer">${mmss(el)}</div>
+      <button class="btn ${running ? '' : 'primary'}" data-act="cardioToggle">${running ? '일시정지' : (el > 0 ? '계속' : '타이머 시작')}</button>
+    </div>` : ''}
+    <div class="card">
+      <div class="card-title">운동 결과 입력</div>
+      <p class="small muted" style="margin-top:0">끝나면 기계 화면에 나온 값을 넣어 주세요. 평균 속도와 칼로리는 자동으로 계산돼요.</p>
+      <div class="grid2">
+        ${inp('min', '시간', '분', c.intensity === 'high' ? '20' : String(c.minutes))}
+        ${inp('km', '거리', 'km', '예: 2.5')}
+        ${isTm ? inp('incline', '경사', '%', String(c.set.incline ?? 0)) : ''}
+        ${inp('kcal', '칼로리', 'kcal', '기계 표시값', '모르면 비워 두세요')}
+      </div>
+      <div class="notice info slim" id="c-calc">${cardioCalcText(c)}</div>
+    </div>
+    <p class="small bold" style="margin-bottom:var(--sp-2)">느낌은 어땠나요? <span class="muted xs">(다음 번 추천에 반영)</span></p>
+    <div class="choice col">${Object.keys(RATINGS).map(k => ratingBtn('cardioRate', k, c.rating, RATING_DESC_CARDIO)).join('')}</div>
+    <div class="notice danger slim">어지럽거나 가슴이 아프면 즉시 멈추세요.</div>
+    ${actionBar('<button class="btn success big" data-act="cardioDone">결과 저장하고 요약 보기</button>')}`;
 };
 
 // =========================================================
@@ -1097,9 +1144,9 @@ function sessionCalc() {
   });
   const c = w.cardio;
   if (c && c.finished) {
-    const ex = EX[c.exId];
-    const min = cardioMinutesDone(c);
-    addRow({ name: `${ex.name} (${Logic.CARDIO_INT[c.intensity].name})`, detail: `${min}분 · ${cardioSetText(ex, c.set, c.intensity)}`, rating: c.rating, cardio: true }, Logic.cardioMET(c.exId, c.intensity, c.set, kg).met, min);
+    const ex = EX[c.exId], r = cardioResult(c);
+    total += r.kcal; net += r.net;
+    rows.push({ name: `${ex.name} (${Logic.CARDIO_INT[c.intensity].name})`, detail: `${r.min}분${r.km ? ` · ${fmt(r.km)}km · 평균 시속 ${fmt(r.avg)}km` : ''}${r.incline ? ` · 경사 ${fmt(r.incline)}%` : ''} · ${r.src}`, rating: c.rating, cardio: true, kcal: r.kcal, net: r.net, met: r.met, min: r.min, res: r });
   }
   return { rows, total, net, minutes: Math.max(1, Math.round((Date.now() - w.start) / 60000)) };
 }
@@ -1121,7 +1168,7 @@ RENDER.summary = () => {
       <div class="bar"><span class="b3" style="width:${pct}%"></span></div></div>` : ''}
     <div class="card">
       <ul class="list">${s.rows.map(r => `<li><div class="item"><span class="title">${r.name}</span><span class="side">${r.kcal ? `약 ${kc(r.kcal)}kcal` : ''}${r.rating ? `<br><span class="tag">${RATINGS[r.rating]} · ${RATING_RPE[r.rating]}</span>` : ''}</span>
-        <span class="sub">${r.detail}${r.met ? ` · MET ${r.met}` : ''}</span></div></li>`).join('')}</ul>
+        <span class="sub">${r.detail}${r.met && !r.cardio ? ` · MET ${r.met}` : ''}</span></div></li>`).join('')}</ul>
     </div>
     <p class="xs muted">총 소모 = MET × 체중 × 시간. 순소모는 가만히 있을 때보다 운동으로 더 쓴 열량((MET−1) × 체중 × 시간)이에요. 모두 추정치예요.</p>
     <button class="btn danger" data-act="discardSession">저장하지 않고 나가기</button>
@@ -1145,9 +1192,10 @@ async function saveSession() {
   const cr = s.rows.find(r => r.cardio);
   if (c && c.finished && cr) {
     const ex = EX[c.exId];
-    await DB.put('cardio', Object.assign({}, base, { exId: c.exId, intensity: c.intensity, minutes: cr.min, set: c.set, rating: c.rating, kcal: Math.round(cr.kcal), net: Math.round(cr.net), met: cr.met }));
+    const x = cr.res;
+    await DB.put('cardio', Object.assign({}, base, { exId: c.exId, intensity: c.intensity, minutes: x.min, km: x.km, avgSpeed: x.avg, incline: x.incline, kcalSource: x.src, set: c.set, rating: c.rating, kcal: Math.round(x.kcal), net: Math.round(x.net), met: x.met }));
     if (c.rating) {
-      const res = Logic.cardioNext(ex, c.intensity, Object.assign({ minutes: c.minutes }, c.set), c.rating, goal().direction === 'loss');
+      const res = Logic.cardioNext(ex, c.intensity, Object.assign({ minutes: x.min }, c.set), c.rating, goal().direction === 'loss');
       const { minutes, ...set } = res.next;
       await DB.put('next', { key: `cardio:${c.exId}:${c.intensity}`, minutes, set, updated: date });
     }
@@ -1177,7 +1225,7 @@ RENDER.records = () => {
     if (r.warmup) return `<div class="item"><span class="title">준비운동</span><span class="side">${r.minutes}분</span></div>`;
     const ex = EX[r.exId];
     if (!ex) return r.exId;
-    if (ex.cardio) return `<div class="item"><span class="title">${ex.name}</span><span class="side">${r.minutes}분</span><span class="sub">${Logic.CARDIO_INT[r.intensity].name}${r.rating ? ' · ' + RATINGS[r.rating] : ''}</span></div>`;
+    if (ex.cardio) return `<div class="item"><span class="title">${ex.name}</span><span class="side">${r.minutes}분${r.km ? `<br>${fmt(r.km)}km` : ''}</span><span class="sub">${Logic.CARDIO_INT[r.intensity].name}${r.avgSpeed ? ` · 평균 시속 ${fmt(r.avgSpeed)}km` : ''}${r.incline ? ` · 경사 ${fmt(r.incline)}%` : ''}${r.rating ? ' · ' + RATINGS[r.rating] : ''}</span></div>`;
     return `<div class="item"><span class="title">${ex.name} ${r.calib ? '<span class="tag">기준 찾기</span>' : ''}</span><span class="side">${r.rating ? RATINGS[r.rating] : ''}</span>
       <span class="sub">${r.sets.map(s => setLabel(ex, s, r.unit || '회')).join(', ')}</span></div>`;
   };
@@ -1454,7 +1502,7 @@ const ACT = {
     if (!confirm('운동을 여기서 끝내고 요약으로 갈까요?')) return;
     const c = S.workout.cardio;
     if (c && !c.finished && c.runStart) { c.elapsedMs += Date.now() - c.runStart; c.runStart = null; }
-    if (c && !c.finished && cardioElapsed(c) >= 60) c.finished = true;
+    if (c && !c.finished && (num(c.res && c.res.min) || cardioElapsed(c) >= 60)) { c.finished = true; c.rating = c.rating || 'ok'; }
     S.workout.phase = 'done'; saveDraft(); go('summary');
   },
   restAdj: el => { if (S.rest) { S.rest.end += (+el.dataset.d) * 1000; S.rest.total = Math.max(S.rest.total, (S.rest.end - Date.now()) / 1000); if (S.rest.end < Date.now()) endRest(false); else updateRestRing(); } },
@@ -1473,6 +1521,16 @@ const ACT = {
   },
   cMin: el => { const c = S.workout.cardio; c.minutes = Math.max(5, c.minutes + (+el.dataset.d) * 5); c.manualMin = true; saveDraft(); rerender(); },
   cardioToggle: () => { unlockAudio(); const c = S.workout.cardio; if (c.runStart) { c.elapsedMs += Date.now() - c.runStart; c.runStart = null; } else c.runStart = Date.now(); saveDraft(); rerender(); },
+  cardioDone: () => {
+    const c = S.workout.cardio;
+    if (c.runStart) { c.elapsedMs += Date.now() - c.runStart; c.runStart = null; }
+    const typed = num(c.res && c.res.min);
+    if (!typed && cardioElapsed(c) < 60) { toast('운동한 시간(분)을 입력해 주세요'); const f = $('#cr-min'); if (f) f.focus(); return; }
+    const r = cardioResult(c);
+    if (EX[c.exId].ctl === 'speed') { if (r.avg) c.set.speed = r.avg; if (r.incline != null) c.set.incline = r.incline; }
+    c.rating = c.rating || 'ok';
+    c.finished = true; S.workout.phase = 'done'; saveDraft(); go('summary');
+  },
   cardioEnd: () => { const c = S.workout.cardio; if (c.runStart) { c.elapsedMs += Date.now() - c.runStart; c.runStart = null; } c.finished = true; saveDraft(); rerender(); window.scrollTo(0, 0); },
   cardioRate: el => { S.workout.cardio.rating = el.dataset.val; saveDraft(); rerender(); },
   toSummary: () => { S.workout.phase = 'done'; saveDraft(); go('summary'); },
@@ -1539,6 +1597,11 @@ document.addEventListener('input', e => {
   const k = el.dataset.rec;
   if (k === 'min') S.form.recEdit.minutes = el.value; else S.form.recEdit.sets[+el.dataset.i][k] = el.value;
 });
+document.addEventListener('input', e => {
+  const el = e.target.closest('[data-cres]'); if (!el || !S.workout || !S.workout.cardio) return;
+  S.workout.cardio.res[el.dataset.cres] = el.value; saveDraft();
+  const t = $('#c-calc'); if (t) t.innerHTML = cardioCalcText(S.workout.cardio);
+});
 document.addEventListener('focusin', e => { if (e.target.classList && e.target.classList.contains('val-input')) e.target.select(); });
 
 // 타이머 화면 갱신 (0.25초마다)
@@ -1547,6 +1610,7 @@ setInterval(() => {
     updateRestRing();
     const left = S.rest.end - Date.now();
     if (!S.rest.warned && left <= 10000) { S.rest.warned = true; vibrate(200); beep(1); }   // 10초 전 예고
+    if (left > 0 && Date.now() - (S.rest.noted || 0) >= 5000) restNotify();               // 상태표시줄 갱신
     if (left <= 0) endRest(true);
   }
   const w = S.workout;

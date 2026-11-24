@@ -190,7 +190,7 @@
   const strength = EXERCISES.filter(e => !e.cardio);
   const noFig = strength.filter(e => !FIG.has(e.id)).map(e => e.name), noMus = EXERCISES.filter(e => !MUSCLE.MAP[e.id]).map(e => e.name);
   const badAlt = EXERCISES.filter(e => e.alts.some(a => !EX[a])).map(e => e.name);
-  h += `<tr><td>근력 운동 수</td><td>49개 (1차 31 + 추가 18)</td><td>${strength.length}개</td><td>${mark(strength.length === 49)}</td></tr>`;
+  h += `<tr><td>근력 운동 수</td><td>57개 (1차 31 + 추가 18 + 기구 변형 8)</td><td>${strength.length}개</td><td>${mark(strength.length === 57)}</td></tr>`;
   h += `<tr><td>모든 운동에 그림·근육 그림·대체 운동</td><td>빠진 것 없음</td><td>${[...noFig, ...noMus, ...badAlt].join(', ') || '빠진 것 없음'}</td><td>${mark(!noFig.length && !noMus.length && !badAlt.length)}</td></tr>`;
   [4, 5, 6].forEach(f => {
     const v = Logic.weekVolume(f, 'intermediate', R);
@@ -204,6 +204,18 @@
   h += `<tr><td>하체B에 힙 어브덕션·사이드 플랭크 추가</td><td>복부 운동 앞에 근력, 복부는 맨 뒤</td><td>${withAdd.map(id => EX[id].name).join(' → ')}</td><td>${mark(JSON.stringify(withAdd) === JSON.stringify(expAdd))}</td></tr>`;
   const spAdd = Logic.sessionPlan({ profile: { height: 175, weight: 80, target: 80, weeks: 12, sex: 'male', age: 40, freq: 4, level: 'intermediate', minutes: 90 }, dayKey: 'LB', adds: { LB: ['hip_abduction'] } });
   h += `<tr><td>추가한 운동이 오늘 계획에 들어감</td><td>힙 어브덕션 포함</td><td>${spAdd.items.map(i => EX[i.id].name).join(', ')}</td><td>${mark(spAdd.items.some(i => i.id === 'hip_abduction'))}</td></tr>`;
+  // 주마다 기구 변형
+  const lb0 = Logic.dayExercises('LB', 'intermediate', {}, {}, 0), lb1 = Logic.dayExercises('LB', 'intermediate', {}, {}, 1), lb2 = Logic.dayExercises('LB', 'intermediate', {}, {}, 2);
+  h += `<tr><td>하체B 레그 컬 주마다</td><td>누워서 → 앉아서 → 누워서</td><td>${[lb0, lb1, lb2].map(l => EX[l.find(id => /leg_curl/.test(id))].name).join(' → ')}</td><td>${mark(lb0.includes('leg_curl') && lb1.includes('seated_leg_curl') && lb2.includes('leg_curl'))}</td></tr>`;
+  const la0 = Logic.dayExercises('LA', 'intermediate', {}, {}, 0), la1 = Logic.dayExercises('LA', 'intermediate', {}, {}, 1);
+  h += `<tr><td>하체A 레그프레스 주마다</td><td>앉아서 → 45도</td><td>${[la0, la1].map(l => EX[l.find(id => /leg_press$/.test(id))].name).join(' → ')}</td><td>${mark(la0.includes('leg_press') && la1.includes('incline_leg_press'))}</td></tr>`;
+  const fixed = ['squat', 'bench', 'rdl'].every(id => [0, 1, 2, 3].every(wk => Object.keys(Logic.DAYS).every(k => !Logic.DAYS[k].list.includes(id) || Logic.dayExercises(k, 'intermediate', {}, {}, wk).includes(id))));
+  h += `<tr><td>큰 바벨 운동은 고정</td><td>스쿼트·벤치·루마니안 데드리프트는 매주 그대로</td><td>${fixed ? '고정됨' : '바뀜'}</td><td>${mark(fixed)}</td></tr>`;
+  let dup = [];
+  for (let wk = 0; wk < 6; wk++) Object.keys(Logic.DAYS).forEach(k => { const l = Logic.dayExercises(k, 'intermediate', {}, {}, wk); if (new Set(l).size !== l.length) dup.push(`${k}/${wk}주`); });
+  h += `<tr><td>변형해도 같은 날 운동이 겹치지 않음</td><td>6주 × 모든 코스 겹침 없음</td><td>${dup.join(', ') || '겹침 없음'}</td><td>${mark(!dup.length)}</td></tr>`;
+  const subKeep = Logic.dayExercises('LB', 'intermediate', { leg_curl: 'rdl' }, {}, 1);
+  h += `<tr><td>직접 대체한 운동은 번갈아 바꾸지 않음</td><td>레그 컬 → 내가 고른 운동 유지</td><td>${subKeep.map(id => EX[id].name).join(', ')}</td><td>${mark(!subKeep.includes('seated_leg_curl'))}</td></tr>`;
   document.getElementById('t-new').innerHTML = h;
 
   document.getElementById('summary').innerHTML = `<div class="notice ${pass === total ? 'info' : 'danger'}"><b>${total}개 중 ${pass}개 통과</b></div>`;

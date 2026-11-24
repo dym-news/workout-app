@@ -1,5 +1,5 @@
 /* =========================================================
-   운동 사전 (설계서 6장) — 근력 49개(1차 31 + 2단계 18) + 유산소 5개
+   운동 사전 (설계서 6장) — 근력 57개(1차 31 + 2단계 18 + 기구 변형 8) + 유산소 5개
    - equip: barbell 바벨 / dumbbell 덤벨 / machine 머신 / cable 케이블 / bodyweight 맨손
    - big: 큰 근육을 여러 관절로 쓰는 운동이면 true (먼저 하고, 상급 목표 횟수 6~10회)
    - lower: 하체 운동이면 true (바벨 중량 증가 +5kg)
@@ -18,11 +18,11 @@ const EXERCISES = [
     tips: ['벤치 등받이를 30~45도로 세웁니다.', '덤벨은 가슴 위쪽 옆으로 내렸다가 위로 모으며 밉니다.', '팔꿈치는 몸통과 45~60도 정도로 둡니다.'],
     cautions: ['팔꿈치를 어깨 높이까지 활짝 벌리지 않습니다.', '덤벨끼리 세게 부딪치지 않습니다.'],
     alts: ['bench', 'chest_press', 'pushup'], mk: 'weights' },
-  { id: 'chest_press', name: '체스트 프레스', group: 'chest', part: '가슴', equip: 'machine', big: true, start: 5,
+  { id: 'chest_press', name: '체스트 프레스', yt: '체스트 프레스 머신 자세', group: 'chest', part: '가슴', equip: 'machine', big: true, start: 5,
     tips: ['손잡이가 가슴 중간 높이에 오도록 의자를 맞춥니다.', '등을 등받이에 붙인 채 앞으로 밉니다.', '돌아올 때 무게를 버티며 천천히 돌아옵니다.'],
     cautions: ['팔꿈치를 끝까지 세게 펴서 잠그지 않습니다.', '어깨가 앞으로 말리지 않게 합니다.'],
     alts: ['bench', 'incline_db', 'pushup'], mk: 'weights' },
-  { id: 'pec_deck', name: '펙덱 플라이', group: 'chest', part: '가슴 안쪽', equip: 'machine', big: false, start: 5,
+  { id: 'pec_deck', name: '펙덱 플라이', yt: '펙덱 플라이 머신 자세', group: 'chest', part: '가슴 안쪽', equip: 'machine', big: false, start: 5,
     tips: ['팔꿈치를 살짝 굽힌 채 고정합니다.', '가슴을 쥐어짜듯 양팔을 앞으로 모읍니다.', '벌릴 때는 가슴이 늘어나는 느낌까지만 천천히 엽니다.'],
     cautions: ['팔을 너무 뒤로 젖혀 어깨에 무리를 주지 않습니다.', '반동으로 휘두르지 않습니다.'],
     alts: ['cable_crossover', 'db_fly', 'chest_press'], mk: 'weights' },
@@ -36,11 +36,11 @@ const EXERCISES = [
     tips: ['등받이를 세운 벤치에 앉아 등을 붙입니다.', '덤벨을 귀 옆 높이에서 머리 위로 밀어 올립니다.', '복부에 힘을 주어 허리를 고정합니다.'],
     cautions: ['허리를 뒤로 크게 젖히지 않습니다.', '덤벨을 너무 깊이 내려 어깨를 꺾지 않습니다.'],
     alts: ['machine_shoulder', 'side_lateral', 'incline_db'], mk: 'weights' },
-  { id: 'side_lateral', name: '사이드 레터럴 레이즈', group: 'shoulder', part: '어깨 옆', equip: 'dumbbell', big: false, start: 2,
+  { id: 'side_lateral', name: '사이드 레터럴 레이즈', yt: '덤벨 사이드 레터럴 레이즈 자세', group: 'shoulder', part: '어깨 옆', equip: 'dumbbell', big: false, start: 2,
     tips: ['팔꿈치를 살짝 굽히고 덤벨을 옆으로 들어 올립니다.', '어깨 높이까지만 올립니다.', '내릴 때 2~3초에 걸쳐 천천히 내립니다.'],
     cautions: ['몸을 흔들어 반동으로 올리지 않습니다.', '어깨를 귀 쪽으로 으쓱하지 않습니다.'],
     alts: ['db_shoulder', 'machine_shoulder', 'face_pull'], mk: 'weights' },
-  { id: 'rear_delt', name: '리어 델트 플라이', group: 'shoulder', part: '어깨 뒤', equip: 'machine', big: false, start: 5,
+  { id: 'rear_delt', name: '리어 델트 플라이', yt: '리어델트 플라이 머신 자세', group: 'shoulder', part: '어깨 뒤', equip: 'machine', big: false, start: 5,
     tips: ['가슴을 패드에 붙이고 앉습니다.', '팔을 크게 원을 그리듯 뒤로 벌립니다.', '어깨 뒤쪽이 조이는 느낌에 집중합니다.'],
     cautions: ['등 전체를 젖혀 당기지 않습니다.', '무거운 무게로 반동을 쓰지 않습니다.'],
     alts: ['face_pull', 'seated_row'], mk: 'weights' },
@@ -50,11 +50,11 @@ const EXERCISES = [
     alts: ['rear_delt', 'seated_row'], mk: 'weights' },
 
   // ---------------- 등 ----------------
-  { id: 'lat_pulldown', name: '랫풀다운', group: 'back', part: '등', equip: 'machine', big: true, start: 5,
+  { id: 'lat_pulldown', name: '랫풀다운', yt: '와이드그립 랫풀다운 자세', group: 'back', part: '등', equip: 'machine', big: true, start: 5,
     tips: ['허벅지 패드로 다리를 고정합니다.', '봉을 쇄골 쪽으로 당기며 가슴을 내밉니다.', '팔보다 팔꿈치를 아래로 끌어내린다는 느낌으로 당깁니다.'],
     cautions: ['봉을 목 뒤로 당기지 않습니다.', '몸을 크게 뒤로 눕혀 당기지 않습니다.'],
     alts: ['assist_pullup', 'seated_row', 'one_arm_row'], mk: 'weights' },
-  { id: 'seated_row', name: '시티드 케이블 로우', group: 'back', part: '등 가운데', equip: 'cable', big: true, start: 5,
+  { id: 'seated_row', name: '시티드 케이블 로우', yt: '시티드 케이블 로우 자세', group: 'back', part: '등 가운데', equip: 'cable', big: true, start: 5,
     tips: ['무릎을 살짝 굽히고 허리를 곧게 세웁니다.', '손잡이를 배꼽 쪽으로 당기며 어깨뼈를 모읍니다.', '돌아갈 때 등이 늘어나는 느낌으로 천천히 보냅니다.'],
     cautions: ['상체를 앞뒤로 크게 흔들지 않습니다.', '허리를 둥글게 말지 않습니다.'],
     alts: ['barbell_row', 'one_arm_row', 'lat_pulldown'], mk: 'weights' },
@@ -66,7 +66,7 @@ const EXERCISES = [
     tips: ['한쪽 무릎과 손을 벤치에 올려 몸을 지탱합니다.', '덤벨을 골반 쪽으로 끌어올립니다.', '등은 바닥과 평행하게 곧게 유지합니다.'],
     cautions: ['몸통을 비틀어 올리지 않습니다.', '어깨를 으쓱하며 당기지 않습니다.'],
     alts: ['barbell_row', 'seated_row'], mk: 'weights' },
-  { id: 'assist_pullup', name: '어시스트 풀업', group: 'back', part: '등·이두', equip: 'machine', big: true, start: 40, assist: true,
+  { id: 'assist_pullup', name: '어시스트 풀업', yt: '어시스트 풀업 머신 자세', group: 'back', part: '등·이두', equip: 'machine', big: true, start: 40, assist: true,
     tips: ['보조 무게가 클수록 쉬워집니다. 처음엔 넉넉하게 설정합니다.', '턱이 봉 높이에 올 때까지 몸을 끌어올립니다.', '내려갈 때 팔이 거의 펴질 때까지 천천히 내려옵니다.'],
     cautions: ['다리 반동으로 올라가지 않습니다.', '맨 아래에서 어깨 힘을 완전히 풀어 매달리지 않습니다.'],
     alts: ['lat_pulldown', 'seated_row'], mk: 'weights' },
@@ -82,7 +82,7 @@ const EXERCISES = [
     alts: ['barbell_curl', 'assist_pullup'], mk: 'weights' },
 
   // ---------------- 팔 뒤(삼두) ----------------
-  { id: 'pushdown', name: '케이블 푸시다운', group: 'triceps', part: '팔 뒤쪽(삼두)', equip: 'cable', big: false, start: 5,
+  { id: 'pushdown', name: '케이블 푸시다운', yt: '케이블 트라이셉스 푸시다운 자세', group: 'triceps', part: '팔 뒤쪽(삼두)', equip: 'cable', big: false, start: 5,
     tips: ['팔꿈치를 옆구리에 붙이고 고정합니다.', '손잡이를 아래로 밀어 팔을 끝까지 폅니다.', '올라올 때 팔꿈치가 뜨지 않게 천천히 올립니다.'],
     cautions: ['상체를 숙여 체중으로 누르지 않습니다.', '팔꿈치가 앞뒤로 움직이지 않게 합니다.'],
     alts: ['overhead_ext', 'assist_dip', 'pushup'], mk: 'weights' },
@@ -96,7 +96,7 @@ const EXERCISES = [
     tips: ['봉을 어깨 위 승모근에 얹고 발은 어깨너비로 섭니다.', '엉덩이를 뒤로 빼며 허벅지가 바닥과 평행할 때까지 앉습니다.', '무릎은 발끝 방향으로 향하게 합니다.'],
     cautions: ['무릎이 안쪽으로 모이지 않게 합니다.', '허리를 둥글게 말지 않습니다.'],
     alts: ['leg_press', 'smith_squat', 'hack_squat', 'bulgarian'], mk: 'sqdl' },
-  { id: 'leg_press', name: '레그프레스', group: 'quads', part: '허벅지 앞·엉덩이', equip: 'machine', big: true, lower: true, start: 10,
+  { id: 'leg_press', name: '시티드 레그프레스', yt: '시티드 레그프레스 머신 자세', group: 'quads', part: '허벅지 앞·엉덩이', equip: 'machine', big: true, lower: true, start: 10,
     tips: ['발판에 발을 어깨너비로 올립니다.', '무릎이 90도쯤 굽을 때까지 내립니다.', '발뒤꿈치로 밀어 올립니다.'],
     cautions: ['무릎을 끝까지 펴서 잠그지 않습니다.', '엉덩이가 의자에서 뜰 만큼 깊이 내리지 않습니다.'],
     alts: ['squat', 'lunge', 'leg_ext'], mk: 'weights' },
@@ -114,10 +114,10 @@ const EXERCISES = [
     tips: ['무릎을 살짝 굽힌 채 고정합니다.', '엉덩이를 뒤로 빼며 봉을 허벅지를 따라 내립니다.', '허벅지 뒤가 당길 때까지만 내리고 엉덩이를 앞으로 밀며 섭니다.'],
     cautions: ['허리를 둥글게 말지 않습니다.', '봉이 몸에서 멀어지지 않게 합니다.'],
     alts: ['leg_curl', 'hip_thrust'], mk: 'sqdl' },
-  { id: 'leg_curl', name: '레그 컬', group: 'hams', part: '허벅지 뒤', equip: 'machine', big: false, lower: true, start: 5,
+  { id: 'leg_curl', name: '라잉 레그 컬', yt: '라잉 레그컬 머신 자세', group: 'hams', part: '허벅지 뒤', equip: 'machine', big: false, lower: true, start: 5,
     tips: ['패드가 발목 바로 위에 오게 맞춥니다.', '뒤꿈치를 엉덩이 쪽으로 끌어당깁니다.', '내릴 때 천천히 버팁니다.'],
     cautions: ['엉덩이가 들리지 않게 합니다.', '반동으로 차올리지 않습니다.'],
-    alts: ['rdl', 'hip_thrust'], mk: 'weights' },
+    alts: ['seated_leg_curl', 'rdl', 'hip_thrust'], mk: 'weights' },
   { id: 'hip_thrust', name: '힙 쓰러스트', group: 'hams', part: '엉덩이', equip: 'barbell', big: true, lower: true, start: 20,
     tips: ['등 윗부분을 벤치에 기대고 봉을 골반 위에 올립니다(패드 사용).', '발뒤꿈치로 밀며 엉덩이를 들어 몸이 일직선이 되게 합니다.', '맨 위에서 엉덩이를 1초 조입니다.'],
     cautions: ['허리를 과하게 젖혀 올리지 않습니다.', '턱을 들지 말고 시선은 앞을 봅니다.'],
@@ -128,11 +128,11 @@ const EXERCISES = [
     alts: ['lunge', 'hip_thrust', 'leg_press'], mk: 'bw' },
 
   // ---------------- 종아리 ----------------
-  { id: 'standing_calf', name: '스탠딩 카프 레이즈', group: 'calves', part: '종아리', equip: 'machine', big: false, lower: true, start: 10,
+  { id: 'standing_calf', name: '스탠딩 카프 레이즈', yt: '스탠딩 카프레이즈 머신 자세', group: 'calves', part: '종아리', equip: 'machine', big: false, lower: true, start: 10,
     tips: ['발 앞쪽만 발판에 올리고 섭니다.', '발뒤꿈치를 최대한 높이 들어 올립니다.', '내릴 때 종아리가 늘어나도록 깊게 내립니다.'],
     cautions: ['무릎을 굽혔다 폈다 하며 반동을 쓰지 않습니다.', '너무 빠르게 튕기지 않습니다.'],
     alts: ['seated_calf'], mk: 'weights' },
-  { id: 'seated_calf', name: '시티드 카프 레이즈', group: 'calves', part: '종아리', equip: 'machine', big: false, lower: true, start: 5,
+  { id: 'seated_calf', name: '시티드 카프 레이즈', yt: '시티드 카프레이즈 머신 자세', group: 'calves', part: '종아리', equip: 'machine', big: false, lower: true, start: 5,
     tips: ['패드를 무릎 바로 위 허벅지에 맞춥니다.', '발뒤꿈치를 최대한 들어 올립니다.', '맨 위에서 1초 멈춥니다.'],
     cautions: ['반동으로 튕기지 않습니다.', '발목이 바깥으로 꺾이지 않게 합니다.'],
     alts: ['standing_calf'], mk: 'weights' },
@@ -169,11 +169,11 @@ const EXERCISES = [
     tips: ['봉 양옆에 발을 두고 상체를 45도쯤 숙입니다.', '손잡이를 명치 쪽으로 당기며 날개뼈를 모읍니다.', '허리는 곧게 유지합니다.'],
     cautions: ['허리를 둥글게 말지 않습니다.', '상체를 들어 올리며 반동으로 당기지 않습니다.'],
     alts: ['barbell_row', 'seated_row', 'one_arm_row'], mk: 'weights' },
-  { id: 'preacher_curl', name: '프리처 컬', group: 'biceps', part: '팔 앞쪽(이두)', equip: 'barbell', big: false, start: 10,
+  { id: 'preacher_curl', name: '프리처 컬', yt: 'EZ바 프리처컬 자세', group: 'biceps', part: '팔 앞쪽(이두)', equip: 'barbell', big: false, start: 10,
     tips: ['겨드랑이를 패드 끝에 붙이고 위팔을 패드에 올립니다.', 'EZ바를 어깨 쪽으로 감아 올립니다.', '내릴 때 팔이 거의 펴질 때까지 천천히 내립니다.'],
     cautions: ['맨 아래에서 툭 떨어뜨리지 않습니다(팔꿈치 부상).', '엉덩이를 들어 반동을 쓰지 않습니다.'],
     alts: ['barbell_curl', 'hammer_curl'], mk: 'weights' },
-  { id: 'assist_dip', name: '어시스트 딥스', group: 'triceps', part: '가슴 아래·삼두', equip: 'machine', big: true, start: 40, assist: true,
+  { id: 'assist_dip', name: '어시스트 딥스', yt: '어시스트 딥스 머신 자세', group: 'triceps', part: '가슴 아래·삼두', equip: 'machine', big: true, start: 40, assist: true,
     tips: ['보조 무게가 클수록 쉬워집니다. 처음엔 넉넉하게 설정합니다.', '손잡이를 잡고 팔꿈치를 뒤로 굽히며 내려갑니다.', '팔꿈치가 90도쯤 되면 밀어 올립니다.'],
     cautions: ['어깨가 아플 만큼 깊이 내려가지 않습니다.', '어깨를 귀 쪽으로 으쓱하지 않습니다.'],
     alts: ['pushdown', 'chest_press', 'pushup'], mk: 'weights' },
@@ -181,19 +181,19 @@ const EXERCISES = [
     tips: ['봉을 승모근에 얹고 발을 몸보다 조금 앞에 둡니다.', '엉덩이를 뒤로 빼며 허벅지가 바닥과 평행할 때까지 앉습니다.', '발 전체로 밀며 일어섭니다.'],
     cautions: ['무릎이 안쪽으로 모이지 않게 합니다.', '안전 고리를 걸 위치를 미리 확인합니다.'],
     alts: ['squat', 'leg_press', 'hack_squat'], mk: 'sqdl' },
-  { id: 'hack_squat', name: '핵 스쿼트', group: 'quads', part: '허벅지 앞', equip: 'machine', big: true, lower: true, start: 20,
+  { id: 'hack_squat', name: '핵 스쿼트', yt: '핵스쿼트 머신 자세', group: 'quads', part: '허벅지 앞', equip: 'machine', big: true, lower: true, start: 20,
     tips: ['등과 어깨를 패드에 붙이고 발판에 어깨너비로 섭니다.', '무릎을 앞으로 보내며 깊게 앉습니다.', '발뒤꿈치로 밀며 일어섭니다.'],
     cautions: ['엉덩이가 패드에서 떨어지지 않게 합니다.', '무릎을 끝까지 세게 펴서 잠그지 않습니다.'],
     alts: ['leg_press', 'smith_squat', 'squat'], mk: 'sqdl' },
-  { id: 'hip_abduction', name: '힙 어브덕션', group: 'hams', part: '엉덩이 옆(중둔근)', equip: 'machine', big: false, lower: true, start: 10,
+  { id: 'hip_abduction', name: '힙 어브덕션', yt: '힙 어브덕션 머신 자세', group: 'hams', part: '엉덩이 옆(중둔근)', equip: 'machine', big: false, lower: true, start: 10,
     tips: ['패드를 무릎 바깥쪽에 대고 앉습니다.', '무릎을 바깥으로 벌리며 엉덩이 옆을 조입니다.', '돌아올 때 천천히 버팁니다.'],
     cautions: ['상체를 앞뒤로 흔들지 않습니다.', '반동으로 벌리지 않습니다.'],
     alts: ['hip_thrust', 'glute_bridge'], mk: 'weights' },
-  { id: 'hip_adduction', name: '힙 어덕션', group: 'quads', part: '허벅지 안쪽', equip: 'machine', big: false, lower: true, start: 10,
+  { id: 'hip_adduction', name: '힙 어덕션', yt: '힙 어덕션 머신 자세', group: 'quads', part: '허벅지 안쪽', equip: 'machine', big: false, lower: true, start: 10,
     tips: ['패드를 무릎 안쪽에 대고 다리를 벌린 채 앉습니다.', '허벅지 안쪽으로 모으며 조입니다.', '벌릴 때 안쪽이 늘어나는 느낌까지 천천히 엽니다.'],
     cautions: ['처음부터 너무 넓게 벌리지 않습니다.', '반동으로 모으지 않습니다.'],
     alts: ['bw_squat', 'lunge'], mk: 'weights' },
-  { id: 'back_ext', name: '백 익스텐션', group: 'hams', part: '허리·엉덩이·허벅지 뒤', equip: 'bodyweight', big: false, start: 0,
+  { id: 'back_ext', name: '백 익스텐션', yt: '45도 백익스텐션 자세', group: 'hams', part: '허리·엉덩이·허벅지 뒤', equip: 'bodyweight', big: false, start: 0,
     tips: ['패드를 골반 바로 아래에 맞추고 발을 고정합니다.', '허리를 곧게 편 채 엉덩이를 축으로 상체를 숙입니다.', '엉덩이를 조이며 몸이 일직선이 될 때까지 올라옵니다.'],
     cautions: ['일직선보다 더 뒤로 젖히지 않습니다.', '허리를 둥글게 말며 내려가지 않습니다.'],
     alts: ['rdl', 'glute_bridge', 'bird_dog'], mk: 'bw' },
@@ -226,6 +226,40 @@ const EXERCISES = [
     tips: ['푸시업 자세에서 시작합니다.', '한쪽 무릎을 가슴 쪽으로 당겼다가 바꿉니다(양쪽 합쳐 2회가 1회).', '엉덩이 높이를 일정하게 유지합니다.'],
     cautions: ['엉덩이가 너무 높이 올라가지 않게 합니다.', '손목이 아프면 속도를 줄입니다.'],
     alts: ['plank', 'hanging_leg'], mk: 'bw' },
+
+  // ================= 기구 변형 (주마다 번갈아 추천) =================
+  { id: 'seated_leg_curl', name: '시티드 레그 컬', yt: '시티드 레그컬 머신 자세', group: 'hams', part: '허벅지 뒤', equip: 'machine', big: false, lower: true, start: 5,
+    tips: ['허벅지 패드를 무릎 바로 위에 단단히 고정합니다.', '종아리 뒤 패드를 아래로 눌러 발뒤꿈치를 의자 밑으로 당깁니다.', '돌아올 때 무릎이 거의 펴질 때까지 천천히 보냅니다.'],
+    cautions: ['엉덩이가 의자에서 뜨지 않게 합니다.', '상체를 앞뒤로 흔들지 않습니다.'],
+    alts: ['leg_curl', 'rdl'], mk: 'weights' },
+  { id: 'incline_leg_press', name: '45도 레그프레스', yt: '45도 레그프레스 자세', group: 'quads', part: '허벅지 앞·엉덩이', equip: 'machine', big: true, lower: true, start: 20,
+    tips: ['등과 엉덩이를 등받이에 붙이고 발판에 어깨너비로 발을 둡니다.', '안전 손잡이를 풀고 무릎이 90도쯤 될 때까지 내립니다.', '발뒤꿈치로 밀어 올립니다.'],
+    cautions: ['엉덩이가 등받이에서 말려 뜰 만큼 깊이 내리지 않습니다.', '무릎을 끝까지 펴서 잠그지 않습니다.'],
+    alts: ['leg_press', 'hack_squat', 'squat'], mk: 'weights' },
+  { id: 'incline_chest_press', name: '인클라인 체스트 프레스', yt: '인클라인 체스트 프레스 머신 자세', group: 'chest', part: '가슴 윗부분', equip: 'machine', big: true, start: 5,
+    tips: ['손잡이가 가슴 윗부분 높이에 오도록 의자를 맞춥니다.', '등을 붙인 채 비스듬히 위로 밉니다.', '돌아올 때 가슴이 늘어나는 느낌까지 천천히 내립니다.'],
+    cautions: ['어깨가 귀 쪽으로 으쓱 올라가지 않게 합니다.', '팔꿈치를 끝까지 세게 펴서 잠그지 않습니다.'],
+    alts: ['incline_db', 'chest_press', 'bench'], mk: 'weights' },
+  { id: 'machine_row', name: '머신 로우', yt: '가슴지지 머신 로우 자세', group: 'back', part: '등 가운데', equip: 'machine', big: true, start: 10,
+    tips: ['가슴을 패드에 붙이고 손잡이를 잡습니다.', '팔꿈치를 뒤로 당기며 날개뼈를 모읍니다.', '가슴이 받쳐 줘서 허리 부담 없이 등에 집중할 수 있어요.'],
+    cautions: ['가슴을 패드에서 떼며 몸으로 당기지 않습니다.', '어깨를 으쓱하지 않습니다.'],
+    alts: ['seated_row', 'tbar_row', 'one_arm_row'], mk: 'weights' },
+  { id: 'vbar_pulldown', name: '클로즈그립 랫풀다운', yt: '클로즈그립 랫풀다운 V바 자세', group: 'back', part: '등 아래쪽', equip: 'machine', big: true, start: 5,
+    tips: ['V자 손잡이를 끼우고 손바닥이 마주 보게 잡습니다.', '가슴을 내밀며 손잡이를 명치 쪽으로 당깁니다.', '팔꿈치를 몸 옆으로 붙여 끌어내립니다.'],
+    cautions: ['몸을 크게 뒤로 눕혀 당기지 않습니다.', '올라갈 때 어깨 힘을 완전히 풀지 않습니다.'],
+    alts: ['lat_pulldown', 'assist_pullup', 'seated_row'], mk: 'weights' },
+  { id: 'cable_curl', name: '케이블 컬', yt: '케이블 바이셉스 컬 자세', group: 'biceps', part: '팔 앞쪽(이두)', equip: 'cable', big: false, start: 5,
+    tips: ['도르래를 가장 낮게 두고 바를 잡습니다.', '팔꿈치를 옆구리에 붙인 채 감아 올립니다.', '케이블이라 내릴 때도 힘이 계속 걸려요. 천천히 내립니다.'],
+    cautions: ['허리를 젖혀 반동으로 올리지 않습니다.', '팔꿈치가 앞으로 나가지 않게 합니다.'],
+    alts: ['barbell_curl', 'preacher_curl', 'hammer_curl'], mk: 'weights' },
+  { id: 'leg_press_calf', name: '레그프레스 카프 레이즈', yt: '레그프레스 카프레이즈 자세', group: 'calves', part: '종아리', equip: 'machine', big: false, lower: true, start: 20,
+    tips: ['레그프레스에서 발 앞쪽만 발판 아래 끝에 걸칩니다.', '무릎은 편 채로 발끝으로 발판을 밀어냅니다.', '돌아올 때 종아리가 늘어나도록 깊게 내립니다.'],
+    cautions: ['안전 손잡이를 걸어 둔 채 합니다(발이 미끄러지면 위험).', '무릎을 굽혔다 폈다 하지 않습니다.'],
+    alts: ['standing_calf', 'seated_calf'], mk: 'weights' },
+  { id: 'cable_lateral', name: '케이블 레터럴 레이즈', yt: '원암 케이블 레터럴 레이즈 자세', group: 'shoulder', part: '어깨 옆', equip: 'cable', big: false, start: 5,
+    tips: ['도르래를 가장 낮게 두고 반대쪽 손으로 손잡이를 잡습니다.', '팔꿈치를 살짝 굽혀 옆으로 어깨 높이까지 들어 올립니다.', '한쪽씩 같은 횟수를 합니다.'],
+    cautions: ['몸을 기울여 반동을 쓰지 않습니다.', '어깨를 으쓱하지 않습니다.'],
+    alts: ['side_lateral', 'machine_shoulder'], mk: 'weights' },
 
   // ---------------- 유산소 ----------------
   // ctl: 조절 방식(speed 속도·경사, level 단계) / watts: 기계 화면의 와트(W)를 입력하면 칼로리가 더 정확해짐
@@ -260,6 +294,7 @@ const EX = Object.fromEntries(EXERCISES.map(e => [e.id, e]));
 
 const EQUIP_NAME = { barbell: '바벨', dumbbell: '덤벨', machine: '머신', cable: '케이블', bodyweight: '맨손' };
 
+// 유튜브 검색어: 기구·방법까지 구분되게 운동마다 따로 정한 검색어(yt)를 우선 사용
 function youtubeLink(ex) {
-  return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(ex.name + ' 자세');
+  return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(ex.yt || (ex.name + ' 자세'));
 }

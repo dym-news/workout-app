@@ -12,6 +12,7 @@ const DEFAULT_RULES = {
   exerciseSharePct: 30,  // 감량 칼로리 중 운동이 맡는 몫(%) — 나머지는 식단
   cardioMinMinutes: 15,  // 유산소 최소 시간(분)
   trimMinSets: 2,        // 시간이 모자랄 때 작은 운동 세트를 몇 세트까지 줄일지
+  rotateVariants: 1,     // 주마다 기구·방법 번갈아 추천 (1 켜기 / 0 끄기)
   incBarbellUpper: 2.5,  // 바벨 상체 중량 증가(kg)
   incBarbellLower: 5,    // 바벨 하체 중량 증가(kg)
   incDumbbell: 1,        // 덤벨 한 칸(kg) — 20kg까지
@@ -30,7 +31,7 @@ const DEFAULT_RULES = {
 };
 const RULE_LABELS = {
   lossWarnPct: ['감량 경고 기준', '%/주'], gainWarnPct: ['증량 경고 기준', '%/주'], kcalPerKg: ['체지방 1kg', 'kcal'],
-  lifeFactor: ['평소 활동 계수', '배'], exerciseSharePct: ['감량 중 운동 몫', '%'], cardioMinMinutes: ['유산소 최소 시간', '분'], trimMinSets: ['줄일 때 최소 세트', '세트'],
+  lifeFactor: ['평소 활동 계수', '배'], exerciseSharePct: ['감량 중 운동 몫', '%'], cardioMinMinutes: ['유산소 최소 시간', '분'], rotateVariants: ['주마다 기구 바꾸기 (1 켜기·0 끄기)', ''], trimMinSets: ['줄일 때 최소 세트', '세트'],
   incBarbellUpper: ['바벨 상체 증가', 'kg'], incBarbellLower: ['바벨 하체 증가', 'kg'], incDumbbell: ['덤벨 한 칸 (20kg까지)', 'kg'], incDumbbellHeavy: ['덤벨 한 칸 (20kg 넘으면)', 'kg'], dumbbellHeavyFrom: ['덤벨 단위 바뀌는 무게', 'kg'], incMachine: ['머신·케이블 한 칸', 'kg'],
   failDropPct: ['목표 미달 시 감소', '%'], dropStepBarbell: ['줄일 때 바벨 단위', 'kg'], dropStepOther: ['줄일 때 덤벨·머신 단위', 'kg'], hardStreakLimit: ['한계 근접 연속 기준', '회'],
   restBeginnerBig: ['휴식: 초보 큰 운동', '초'], restBeginnerSmall: ['휴식: 초보 작은 운동', '초'], restMid: ['휴식: 중급', '초'],
@@ -227,10 +228,50 @@ const Logic = (() => {
     const c = cycle(freq, level);
     return Array.from({ length: freq }, (_, i) => c[(start + i) % c.length]);
   }
+  // 주마다 번갈아 추천하는 기구·방법 묶음 (같은 근육, 다른 기구·자세)
+  //  큰 바벨 운동(스쿼트·벤치·루마니안 데드리프트 등)은 무게 변화를 보기 위해 고정
+  const VARIANTS = [
+    ['leg_curl', 'seated_leg_curl'],               // 누워서 ↔ 앉아서
+    ['leg_press', 'incline_leg_press'],            // 앉아서 ↔ 45도
+    ['chest_press', 'incline_chest_press'],
+    ['seated_row', 'machine_row'],
+    ['lat_pulldown', 'vbar_pulldown'],
+    ['barbell_curl', 'cable_curl', 'preacher_curl'],
+    ['standing_calf', 'leg_press_calf', 'seated_calf'],
+    ['side_lateral', 'cable_lateral'],
+    ['db_shoulder', 'machine_shoulder'],
+    ['face_pull', 'rear_delt'],
+    ['db_fly', 'pec_deck', 'cable_crossover'],
+  ];
+  const groupOf = id => VARIANTS.find(g => g.includes(id));
+  // 몇 번째 주인지 (2026-01-05 월요일 기준)
+  function weekIndex(t = Date.now()) {
+    const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return Math.round((d - new Date(2026, 0, 5)) / (7 * 86400000));
+  }
+  function variantFor(id, wk) {
+    const g = groupOf(id); if (!g || wk == null) return id;
+    return g[(((g.indexOf(id) + wk) % g.length) + g.length) % g.length];
+  }
+  // 그날 코스에서 이 운동의 원래 자리(템플릿 운동) 찾기
+  function baseInDay(dayKey, id) {
+    const list = DAYS[dayKey] ? DAYS[dayKey].list : [];
+    if (list.includes(id)) return id;
+    const g = groupOf(id);
+    return (g && list.find(x => g.includes(x))) || id;
+  }
+
   // adds: 코스에 직접 추가한 운동 {요일키: [운동…]} — 복부 운동 앞에 끼워 넣음
-  function dayExercises(dayKey, level, subs = {}, adds = {}) {
+  // wk: 주 번호를 주면 기구 변형을 주마다 번갈아 적용 (대체한 운동은 그대로)
+  function dayExercises(dayKey, level, subs = {}, adds = {}, wk = null) {
     const d = DAYS[dayKey];
-    const list = d.list.filter(id => !(level === 'beginner' && d.skipBeginner.includes(id))).map(id => subs[id] || id);
+    const base = d.list.filter(id => !(level === 'beginner' && d.skipBeginner.includes(id)));
+    const list = [];
+    base.forEach(id => {
+      if (subs[id]) { list.push(subs[id]); return; }
+      const v = variantFor(id, wk);
+      list.push(v !== id && !base.includes(v) && !list.includes(v) && !Object.values(subs).includes(v) ? v : id);
+    });
     const extra = (adds[dayKey] || []).filter(id => EX[id] && !list.includes(id));
     if (!extra.length) return list;
     let at = list.length;
@@ -414,11 +455,11 @@ const Logic = (() => {
   //  ④ 감량 중 시간이 모자라면 유산소를 다음 날로 미루지 않고 작은 운동 세트부터 줄여 유산소 최소 시간을 확보
   //  ⑤ 그래도 못 채운 열량은 '식단으로' 표시
   // =========================================================
-  function sessionPlan({ profile, dayKey, subs = {}, adds = {}, next = {}, intervalsThisWeek = 0, cardioSettings }) {
+  function sessionPlan({ profile, dayKey, subs = {}, adds = {}, next = {}, intervalsThisWeek = 0, cardioSettings, wk = null }) {
     const R = rules(profile), kg = profile.weight, level = profile.level;
     const g = goalCheck(profile, R);
     const warmMin = 7, warmNet = netKcal(WARMUP.met, kg, warmMin);
-    const items = dayExercises(dayKey, level, subs, adds).map(id => {
+    const items = dayExercises(dayKey, level, subs, adds, wk).map(id => {
       const ex = EX[id], presc = prescription(ex, level, R);
       return { id, sets: presc.sets, presc };
     });
@@ -595,7 +636,7 @@ const Logic = (() => {
   }
 
   return {
-    BODY_FIELDS, bodyAssess, REGIONS, setsByRegion, weekVolume, rules, bmr, goalCheck, DAYS, cycle, splitNote, weekPlan, dayExercises, isLowerDay,
+    BODY_FIELDS, bodyAssess, VARIANTS, weekIndex, variantFor, baseInDay, REGIONS, setsByRegion, weekVolume, rules, bmr, goalCheck, DAYS, cycle, splitNote, weekPlan, dayExercises, isLowerDay,
     prescription, increment, weightStep, isWeighted, dropWeight, nextRec, calibrated, estMinutes,
     CARDIO_INT, cardioIntensity, cardioDefaults, cardioMinutes, cardioNext, hrRange, sessionPlan,
     MET_CODES, strengthMET, cardioMET, acsmTreadmill, acsmBike, WARMUP, kcal, netKcal,
