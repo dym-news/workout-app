@@ -190,7 +190,7 @@
   const strength = EXERCISES.filter(e => !e.cardio);
   const noFig = strength.filter(e => !FIG.has(e.id)).map(e => e.name), noMus = EXERCISES.filter(e => !MUSCLE.MAP[e.id]).map(e => e.name);
   const badAlt = EXERCISES.filter(e => e.alts.some(a => !EX[a])).map(e => e.name);
-  h += `<tr><td>근력 운동 수</td><td>57개 (1차 31 + 추가 18 + 기구 변형 8)</td><td>${strength.length}개</td><td>${mark(strength.length === 57)}</td></tr>`;
+  h += `<tr><td>근력 운동 수</td><td>60개 (1차 31 + 추가 18 + 기구 변형 11)</td><td>${strength.length}개</td><td>${mark(strength.length === 60)}</td></tr>`;
   h += `<tr><td>모든 운동에 그림·근육 그림·대체 운동</td><td>빠진 것 없음</td><td>${[...noFig, ...noMus, ...badAlt].join(', ') || '빠진 것 없음'}</td><td>${mark(!noFig.length && !noMus.length && !badAlt.length)}</td></tr>`;
   [4, 5, 6].forEach(f => {
     const v = Logic.weekVolume(f, 'intermediate', R);
@@ -209,8 +209,11 @@
   h += `<tr><td>하체B 레그 컬 주마다</td><td>누워서 → 앉아서 → 누워서</td><td>${[lb0, lb1, lb2].map(l => EX[l.find(id => /leg_curl/.test(id))].name).join(' → ')}</td><td>${mark(lb0.includes('leg_curl') && lb1.includes('seated_leg_curl') && lb2.includes('leg_curl'))}</td></tr>`;
   const la0 = Logic.dayExercises('LA', 'intermediate', {}, {}, 0), la1 = Logic.dayExercises('LA', 'intermediate', {}, {}, 1);
   h += `<tr><td>하체A 레그프레스 주마다</td><td>앉아서 → 45도</td><td>${[la0, la1].map(l => EX[l.find(id => /leg_press$/.test(id))].name).join(' → ')}</td><td>${mark(la0.includes('leg_press') && la1.includes('incline_leg_press'))}</td></tr>`;
-  const fixed = ['squat', 'bench', 'rdl'].every(id => [0, 1, 2, 3].every(wk => Object.keys(Logic.DAYS).every(k => !Logic.DAYS[k].list.includes(id) || Logic.dayExercises(k, 'intermediate', {}, {}, wk).includes(id))));
-  h += `<tr><td>큰 바벨 운동은 고정</td><td>스쿼트·벤치·루마니안 데드리프트는 매주 그대로</td><td>${fixed ? '고정됨' : '바뀜'}</td><td>${mark(fixed)}</td></tr>`;
+  const fa0 = Logic.dayExercises('FA', 'intermediate', {}, {}, 0), fa1 = Logic.dayExercises('FA', 'intermediate', {}, {}, 1);
+  const bigOk = fa0.includes('squat') && fa1.includes('smith_squat') && fa0.includes('bench') && fa1.includes('db_bench');
+  h += `<tr><td>큰 운동도 주마다</td><td>스쿼트 봉 자유↔스미스, 벤치 바벨↔덤벨</td><td>${[fa0, fa1].map(l => l.slice(0, 2).map(id => EX[id].name).join('·')).join(' → ')}</td><td>${mark(bigOk)}</td></tr>`;
+  const hol = Logic.HOLIDAYS['2026-09-25'] === '추석' && Logic.HOLIDAYS['2027-02-09'] === '대체공휴일' && !Logic.HOLIDAYS['2026-11-25'];
+  h += `<tr><td>공휴일 표</td><td>2026 추석·2027 설 대체공휴일 있음</td><td>${Object.keys(Logic.HOLIDAYS).length}일</td><td>${mark(hol)}</td></tr>`;
   let dup = [];
   for (let wk = 0; wk < 6; wk++) Object.keys(Logic.DAYS).forEach(k => { const l = Logic.dayExercises(k, 'intermediate', {}, {}, wk); if (new Set(l).size !== l.length) dup.push(`${k}/${wk}주`); });
   h += `<tr><td>변형해도 같은 날 운동이 겹치지 않음</td><td>6주 × 모든 코스 겹침 없음</td><td>${dup.join(', ') || '겹침 없음'}</td><td>${mark(!dup.length)}</td></tr>`;

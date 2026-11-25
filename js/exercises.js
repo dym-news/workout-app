@@ -10,7 +10,7 @@
 
 const EXERCISES = [
   // ---------------- 가슴 ----------------
-  { id: 'bench', name: '벤치프레스', group: 'chest', part: '가슴', equip: 'barbell', big: true, start: 20,
+  { id: 'bench', name: '바벨 벤치프레스', yt: '바벨 벤치프레스 자세', group: 'chest', part: '가슴', equip: 'barbell', big: true, start: 20,
     tips: ['어깨뼈를 뒤로 모으고 가슴을 살짝 들어 올립니다.', '봉은 가슴 중간(유두 선)까지 천천히 내립니다.', '발바닥 전체로 바닥을 단단히 밀어 몸을 고정합니다.'],
     cautions: ['엉덩이가 벤치에서 뜨지 않게 합니다.', '봉을 가슴에 튕기듯 내리치지 않습니다.'],
     alts: ['incline_db', 'chest_press', 'pushup'], mk: 'weights' },
@@ -92,7 +92,7 @@ const EXERCISES = [
     alts: ['pushdown', 'pushup'], mk: 'weights' },
 
   // ---------------- 허벅지 앞 ----------------
-  { id: 'squat', name: '바벨 스쿼트', group: 'quads', part: '허벅지 앞·엉덩이', equip: 'barbell', big: true, lower: true, start: 20,
+  { id: 'squat', name: '바벨 스쿼트', yt: '프리웨이트 바벨 스쿼트 자세', group: 'quads', part: '허벅지 앞·엉덩이', equip: 'barbell', big: true, lower: true, start: 20,
     tips: ['봉을 어깨 위 승모근에 얹고 발은 어깨너비로 섭니다.', '엉덩이를 뒤로 빼며 허벅지가 바닥과 평행할 때까지 앉습니다.', '무릎은 발끝 방향으로 향하게 합니다.'],
     cautions: ['무릎이 안쪽으로 모이지 않게 합니다.', '허리를 둥글게 말지 않습니다.'],
     alts: ['leg_press', 'smith_squat', 'hack_squat', 'bulgarian'], mk: 'sqdl' },
@@ -177,7 +177,7 @@ const EXERCISES = [
     tips: ['보조 무게가 클수록 쉬워집니다. 처음엔 넉넉하게 설정합니다.', '손잡이를 잡고 팔꿈치를 뒤로 굽히며 내려갑니다.', '팔꿈치가 90도쯤 되면 밀어 올립니다.'],
     cautions: ['어깨가 아플 만큼 깊이 내려가지 않습니다.', '어깨를 귀 쪽으로 으쓱하지 않습니다.'],
     alts: ['pushdown', 'chest_press', 'pushup'], mk: 'weights' },
-  { id: 'smith_squat', name: '스미스머신 스쿼트', group: 'quads', part: '허벅지 앞·엉덩이', equip: 'machine', big: true, lower: true, start: 20,
+  { id: 'smith_squat', name: '스미스머신 스쿼트', yt: '스미스머신 스쿼트 자세', group: 'quads', part: '허벅지 앞·엉덩이', equip: 'machine', big: true, lower: true, start: 20,
     tips: ['봉을 승모근에 얹고 발을 몸보다 조금 앞에 둡니다.', '엉덩이를 뒤로 빼며 허벅지가 바닥과 평행할 때까지 앉습니다.', '발 전체로 밀며 일어섭니다.'],
     cautions: ['무릎이 안쪽으로 모이지 않게 합니다.', '안전 고리를 걸 위치를 미리 확인합니다.'],
     alts: ['squat', 'leg_press', 'hack_squat'], mk: 'sqdl' },
@@ -260,6 +260,18 @@ const EXERCISES = [
     tips: ['도르래를 가장 낮게 두고 반대쪽 손으로 손잡이를 잡습니다.', '팔꿈치를 살짝 굽혀 옆으로 어깨 높이까지 들어 올립니다.', '한쪽씩 같은 횟수를 합니다.'],
     cautions: ['몸을 기울여 반동을 쓰지 않습니다.', '어깨를 으쓱하지 않습니다.'],
     alts: ['side_lateral', 'machine_shoulder'], mk: 'weights' },
+  { id: 'db_bench', name: '덤벨 벤치프레스', yt: '덤벨 벤치프레스 자세', group: 'chest', part: '가슴', equip: 'dumbbell', big: true, start: 6,
+    tips: ['평평한 벤치에 누워 덤벨을 가슴 옆에 둡니다.', '어깨뼈를 모은 채 덤벨을 가슴 위로 밀어 올리며 살짝 모읍니다.', '가슴이 늘어나는 느낌이 들 때까지 천천히 내립니다.'],
+    cautions: ['팔꿈치를 어깨 높이까지 활짝 벌리지 않습니다.', '끝나면 덤벨을 허벅지 위로 가져온 뒤 일어납니다.'],
+    alts: ['bench', 'chest_press', 'pushup'], mk: 'weights' },
+  { id: 'incline_bench', name: '인클라인 벤치프레스', yt: '인클라인 바벨 벤치프레스 자세', group: 'chest', part: '가슴 윗부분', equip: 'barbell', big: true, start: 20,
+    tips: ['등받이를 30~45도로 세우고 어깨뼈를 모읍니다.', '봉을 쇄골 바로 아래 가슴 윗부분까지 천천히 내립니다.', '발로 바닥을 밀며 봉을 똑바로 밀어 올립니다.'],
+    cautions: ['엉덩이가 등받이에서 뜨지 않게 합니다.', '처음에는 보조자나 안전바를 꼭 씁니다.'],
+    alts: ['incline_db', 'incline_chest_press'], mk: 'weights' },
+  { id: 'db_rdl', name: '덤벨 루마니안 데드리프트', yt: '덤벨 루마니안 데드리프트 자세', group: 'hams', part: '허벅지 뒤·엉덩이', equip: 'dumbbell', big: true, lower: true, start: 8,
+    tips: ['양손에 덤벨을 들고 무릎을 살짝 굽힌 채 고정합니다.', '엉덩이를 뒤로 빼며 덤벨을 허벅지 앞을 따라 내립니다.', '허벅지 뒤가 당길 때까지만 내리고 엉덩이를 앞으로 밀며 섭니다.'],
+    cautions: ['허리를 둥글게 말지 않습니다.', '덤벨이 몸에서 멀어지지 않게 합니다.'],
+    alts: ['rdl', 'leg_curl', 'hip_thrust'], mk: 'sqdl' },
 
   // ---------------- 유산소 ----------------
   // ctl: 조절 방식(speed 속도·경사, level 단계) / watts: 기계 화면의 와트(W)를 입력하면 칼로리가 더 정확해짐

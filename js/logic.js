@@ -229,8 +229,12 @@ const Logic = (() => {
     return Array.from({ length: freq }, (_, i) => c[(start + i) % c.length]);
   }
   // 주마다 번갈아 추천하는 기구·방법 묶음 (같은 근육, 다른 기구·자세)
-  //  큰 바벨 운동(스쿼트·벤치·루마니안 데드리프트 등)은 무게 변화를 보기 위해 고정
+  //  무게 기록·다음 목표는 운동마다 따로 관리돼서 번갈아도 무게 흐름이 섞이지 않음
   const VARIANTS = [
+    ['squat', 'smith_squat'],                      // 봉 자유 ↔ 봉 레일 고정
+    ['bench', 'db_bench'],                         // 바벨 ↔ 덤벨
+    ['incline_db', 'incline_bench'],               // 덤벨 ↔ 바벨
+    ['rdl', 'db_rdl'],                             // 바벨 ↔ 덤벨
     ['leg_curl', 'seated_leg_curl'],               // 누워서 ↔ 앉아서
     ['leg_press', 'incline_leg_press'],            // 앉아서 ↔ 45도
     ['chest_press', 'incline_chest_press'],
@@ -244,6 +248,21 @@ const Logic = (() => {
     ['db_fly', 'pec_deck', 'cable_crossover'],
   ];
   const groupOf = id => VARIANTS.find(g => g.includes(id));
+  // 공휴일 (대체공휴일 포함) — 2026·2027년
+  const HOLIDAYS = {
+    '2026-01-01': '신정', '2026-02-16': '설날 연휴', '2026-02-17': '설날', '2026-02-18': '설날 연휴',
+    '2026-03-01': '삼일절', '2026-03-02': '대체공휴일', '2026-05-01': '노동절', '2026-05-05': '어린이날',
+    '2026-05-24': '부처님오신날', '2026-05-25': '대체공휴일', '2026-06-03': '지방선거', '2026-06-06': '현충일',
+    '2026-07-17': '제헌절', '2026-08-15': '광복절', '2026-08-17': '대체공휴일',
+    '2026-09-24': '추석 연휴', '2026-09-25': '추석', '2026-09-26': '추석 연휴',
+    '2026-10-03': '개천절', '2026-10-05': '대체공휴일', '2026-10-09': '한글날', '2026-12-25': '성탄절',
+    '2027-01-01': '신정', '2027-02-06': '설날 연휴', '2027-02-07': '설날', '2027-02-08': '설날 연휴', '2027-02-09': '대체공휴일',
+    '2027-03-01': '삼일절', '2027-05-01': '노동절', '2027-05-03': '대체공휴일', '2027-05-05': '어린이날',
+    '2027-05-13': '부처님오신날', '2027-06-06': '현충일', '2027-07-17': '제헌절', '2027-07-19': '대체공휴일',
+    '2027-08-15': '광복절', '2027-08-16': '대체공휴일', '2027-09-14': '추석 연휴', '2027-09-15': '추석', '2027-09-16': '추석 연휴',
+    '2027-10-03': '개천절', '2027-10-04': '대체공휴일', '2027-10-09': '한글날', '2027-10-11': '대체공휴일',
+    '2027-12-25': '성탄절', '2027-12-27': '대체공휴일',
+  };
   // 몇 번째 주인지 (2026-01-05 월요일 기준)
   function weekIndex(t = Date.now()) {
     const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
@@ -636,7 +655,7 @@ const Logic = (() => {
   }
 
   return {
-    BODY_FIELDS, bodyAssess, VARIANTS, weekIndex, variantFor, baseInDay, REGIONS, setsByRegion, weekVolume, rules, bmr, goalCheck, DAYS, cycle, splitNote, weekPlan, dayExercises, isLowerDay,
+    BODY_FIELDS, bodyAssess, VARIANTS, HOLIDAYS, weekIndex, variantFor, baseInDay, REGIONS, setsByRegion, weekVolume, rules, bmr, goalCheck, DAYS, cycle, splitNote, weekPlan, dayExercises, isLowerDay,
     prescription, increment, weightStep, isWeighted, dropWeight, nextRec, calibrated, estMinutes,
     CARDIO_INT, cardioIntensity, cardioDefaults, cardioMinutes, cardioNext, hrRange, sessionPlan,
     MET_CODES, strengthMET, cardioMET, acsmTreadmill, acsmBike, WARMUP, kcal, netKcal,

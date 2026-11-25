@@ -413,7 +413,7 @@ RENDER.routine = () => {
       <div class="card-title">분할 순서 <span class="side">이번 주 ${done}회 완료</span></div>
       <div class="row wrap" style="gap:6px">${week.map((k, i) => `<span class="tag ${i < done ? 'success' : i === done ? 'primary' : ''}">${Logic.DAYS[k].name.split(' ')[0]}</span>${i < week.length - 1 ? '<span class="muted xs">→</span>' : ''}`).join('')}</div>
       <p class="small" style="margin-bottom:0">${Logic.splitNote(p.freq, p.level)}</p>
-      ${rules().rotateVariants ? '<p class="small" style="margin-bottom:0">🔄 레그 컬(누워서↔앉아서), 레그프레스(앉아서↔45도)처럼 <b>기구·방법을 주마다 번갈아</b> 추천해요. 스쿼트·벤치프레스 같은 큰 바벨 운동은 무게 변화를 보려고 그대로 둬요. (설정 → 추천 기준 수치에서 끌 수 있어요)</p>' : ''}
+      ${rules().rotateVariants ? '<p class="small" style="margin-bottom:0">🔄 레그 컬(누워서↔앉아서), 레그프레스(앉아서↔45도), 스쿼트(봉 자유↔스미스머신), 벤치프레스(바벨↔덤벨)처럼 <b>기구·방법을 주마다 번갈아</b> 추천해요. 무게 기록과 다음 목표는 운동마다 따로 관리돼요. (설정 → 추천 기준 수치에서 끌 수 있어요)</p>' : ''}
       <p class="xs muted" style="margin-bottom:0">요일을 고정하지 않고 '다음 차례'로 돌아가요. 하루 빠져도 순서가 꼬이지 않아요.${done >= p.freq ? ' 이번 주 목표를 채웠어요!' : ''}</p>
     </div>
     ${week.map(dayCard).join('')}`;
@@ -593,8 +593,9 @@ function calendarCard(sessionList, rowHtml) {
   for (let d = 1; d <= days; d++) {
     const key = `${cur}-${pad2(d)}`;
     const ss = byDate[key] || [];
-    const cls = ['d', key === today ? 'today' : '', key === S.form.calDay ? 'sel' : '', ss.length ? 'has' : '', key > today ? 'future' : ''].join(' ');
-    cells.push(`<button class="${cls}" data-act="calDay" data-val="${key}" aria-label="${M}월 ${d}일${ss.length ? ' 운동함' : ''}">
+    const dow = (lead + d - 1) % 7, hol = Logic.HOLIDAYS[key];
+    const cls = ['d', hol || dow === 6 ? 'sun' : dow === 5 ? 'sat' : '', key === today ? 'today' : '', key === S.form.calDay ? 'sel' : '', ss.length ? 'has' : '', key > today ? 'future' : ''].join(' ');
+    cells.push(`<button class="${cls}" data-act="calDay" data-val="${key}" aria-label="${M}월 ${d}일${hol ? ' ' + hol : ''}${ss.length ? ' 운동함' : ''}"${hol ? ` title="${hol}"` : ''}>
       <span class="n">${d}</span><span class="marks">${ss.slice(0, 3).map(x => `<i class="dot ${areaClass(x.dayKey)}"></i>`).join('')}${weighed.has(key) ? '<i class="scale">⚖</i>' : ''}</span></button>`);
   }
   // 고른 날 기록
@@ -605,7 +606,7 @@ function calendarCard(sessionList, rowHtml) {
     const w = S.weights.find(x => x.date === sel), b = (S.body || []).find(x => x.date === sel);
     const dd = new Date(sel + 'T00:00:00');
     detail = `<div class="cal-detail">
-      <div class="card-title" style="margin-bottom:var(--sp-2)">${korDate(dd)} <button class="btn small" data-act="calDay" data-val="">닫기</button></div>
+      <div class="card-title" style="margin-bottom:var(--sp-2)">${korDate(dd)}${Logic.HOLIDAYS[sel] ? ` <span class="hol-name">${Logic.HOLIDAYS[sel]}</span>` : ''} <button class="btn small" data-act="calDay" data-val="">닫기</button></div>
       ${w || b ? `<p class="small" style="margin-top:0">⚖ ${w ? `체중 <b>${fmt(w.kg)}kg</b>` : ''}${b && b.fatPct != null ? ` · 체지방률 <b>${b.fatPct}%</b>` : ''}${b && b.smm != null ? ` · 골격근량 <b>${b.smm}kg</b>` : ''}</p>` : ''}
       ${daySess.length ? daySess.map(x => `<div class="card tight" style="background:var(--surface);margin-bottom:var(--sp-2)">
           <div class="row between small"><b>${Logic.DAYS[x.dayKey] ? Logic.DAYS[x.dayKey].name : '운동'}</b><span class="muted">${x.min}분 · 약 ${kc(x.kcal)}kcal</span></div>
@@ -622,7 +623,7 @@ function calendarCard(sessionList, rowHtml) {
       <div class="stat"><div class="label">총 소모</div><div class="value">${kc(mKcal)}<small>kcal</small></div></div>
     </div>
     ${streak > 0 ? `<div class="notice info slim" style="margin-top:0">🔥 <b>${streak}주 연속</b> 주 ${S.profile.freq}회 목표를 달성했어요!</div>` : ''}
-    <div class="cal-head">${'월화수목금토일'.split('').map(x => `<span>${x}</span>`).join('')}</div>
+    <div class="cal-head">${'월화수목금토일'.split('').map((x, i) => `<span class="${i === 6 ? 'sun' : i === 5 ? 'sat' : ''}">${x}</span>`).join('')}</div>
     <div class="cal">${cells.join('')}</div>
     <div class="legend" style="margin-top:var(--sp-2)"><span><i class="dot c-upper"></i>상체</span><span><i class="dot c-lower"></i>하체</span><span><i class="dot c-full"></i>전신</span><span>⚖ 체중·인바디</span></div>
     ${detail}
@@ -633,7 +634,8 @@ function weekStrip() {
   const start = weekStartOf(Date.now()), byDate = sessionsByDate(), today = ymd();
   return `<div class="week-strip">${'월화수목금토일'.split('').map((name, i) => {
     const key = ymd(new Date(start + i * 86400000)), ss = byDate[key] || [];
-    return `<div class="wd ${key === today ? 'today' : ''} ${ss.length ? 'has' : ''}"><span class="nm">${name}</span>
+    const dc = Logic.HOLIDAYS[key] || i === 6 ? 'sun' : i === 5 ? 'sat' : '';
+    return `<div class="wd ${dc} ${key === today ? 'today' : ''} ${ss.length ? 'has' : ''}"><span class="nm">${name}</span>
       <span class="ck">${ss.length ? `<i class="dot ${areaClass(ss[0].dayKey)}"></i>` : ''}</span></div>`;
   }).join('')}</div>`;
 }

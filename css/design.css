@@ -27,6 +27,8 @@
   --cal-upper: #5b8cff;     /* 달력: 상체 */
   --cal-lower: #34c38f;     /* 달력: 하체 */
   --cal-full: #a46cf5;      /* 달력: 전신 */
+  --cal-sat: #5b9bff;       /* 달력: 토요일 */
+  --cal-sun: #ff5c63;       /* 달력: 일요일·공휴일 */
 
   /* ---- 글자 크기 ---- */
   --fs-xs: 12px;            /* 아주 작은 설명 */
@@ -82,6 +84,8 @@
   --cal-upper: #2f6fe4;
   --cal-lower: #179c6b;
   --cal-full: #8b4fe0;
+  --cal-sat: #2f6fe0;
+  --cal-sun: #e0353d;
 }
 
 /* =========================================================
@@ -300,6 +304,9 @@ input::placeholder { color: var(--text-muted); font-weight: 400; }
 .cal .d .n { font-size: var(--fs-sm); font-weight: 600; line-height: 1; }
 .cal .d.has .n { font-weight: 800; }
 .cal .d.future { opacity: .45; }
+.cal .d.sat .n, .cal-head .sat, .week-strip .wd.sat .nm { color: var(--cal-sat); }
+.cal .d.sun .n, .cal-head .sun, .week-strip .wd.sun .nm { color: var(--cal-sun); }
+.hol-name { font-size: var(--fs-xs); color: var(--cal-sun); font-weight: 700; }
 .cal .d.today { outline: 2px solid var(--primary); outline-offset: -2px; }
 .cal .d.sel { background: var(--primary-soft); box-shadow: inset 0 0 0 2px var(--primary); }
 .cal .marks { display: flex; gap: 2px; align-items: center; min-height: 10px; }
